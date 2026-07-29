@@ -5,7 +5,26 @@
   "display": "standalone",
   "background_color": "#141210",
   "theme_color": "#141210",
-  "icons": [],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png?v=4",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png?v=4",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-512.png?v=4",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
   "shortcuts": [
     {
       "name": "Kyle Kinane Shows",
@@ -13,5 +32,7 @@
       "url": "/?view=shows",
       "description": "Upcoming Kyle Kinane dates. Also makes the app findable by searching 'Kinane' in the Android app drawer, which 'Uncle BBQ' alone would not."
     }
-  ]
+  ],
+  "description": "Never miss a chance to see Kyle Kinane live.",
+  "orientation": "portrait"
 }
