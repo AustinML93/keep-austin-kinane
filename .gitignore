@@ -14,3 +14,6 @@ recon/probe_summary.json
 # public on his site, but there's no reason to republish a vendor's bearer token
 # — and the tests only need the API payload, not this page.
 recon/raw/kylekinane-com.html
+
+# Secrets for compose (TICKETMASTER_API_KEY)
+.env

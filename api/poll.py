@@ -14,9 +14,26 @@ from dataclasses import dataclass
 from . import db
 from .sources.capcity import CapCity
 from .sources.kylekinane import KyleKinaneOfficial
+from .sources.ticketmaster import Ticketmaster
 from .tiering import apply_austin_rule, tier_for
 
-SOURCES = [KyleKinaneOfficial(), CapCity()]
+
+def active_sources() -> list:
+    """
+    Ticketmaster only registers when a key is present.
+
+    Registering it keyless would park a permanent 'config_failed' in the health
+    readout, and a status line that always complains is a status line nobody
+    reads — which is how a REAL warning gets ignored later.
+    """
+    sources = [KyleKinaneOfficial(), CapCity()]
+    tm = Ticketmaster()
+    if tm.api_key:
+        sources.append(tm)
+    return sources
+
+
+SOURCES = active_sources()
 
 
 @dataclass
@@ -29,7 +46,7 @@ class PollReport:
 def poll_once(con=None, sources=None) -> PollReport:
     own = con is None
     con = con or db.connect()
-    sources = sources or SOURCES
+    sources = sources or active_sources()
     new_events: list[dict] = []
     per_source: dict[str, str] = {}
 

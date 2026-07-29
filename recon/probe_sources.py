@@ -128,7 +128,9 @@ SOURCES = [
         "tier": "primary",
         "urls": [tm_shape_url()],
         "needs": "TICKETMASTER_API_KEY",
-        "shape_only": True,  # presence of Kinane not expected or required
+        # Control query: proves the API works even when he isn't booked. Without
+        # it, a throttled key looks exactly like a quiet month.
+        "shape_only": True,
     },
     {
         "name": "Bandsintown",

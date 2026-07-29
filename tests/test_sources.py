@@ -11,6 +11,7 @@ from pathlib import Path
 
 from api.sources.capcity import CapCity
 from api.sources.kylekinane import KyleKinaneOfficial
+from api.sources.ticketmaster import Ticketmaster
 
 RAW = Path(__file__).resolve().parent.parent / "recon" / "raw"
 
@@ -111,6 +112,60 @@ class TestCapCity(unittest.TestCase):
         r = CapCity().parse("<html><body>hello</body></html>")
         self.assertFalse(r.ok)
         self.assertEqual(r.error_kind, "parse")
+
+
+class TestTicketmaster(unittest.TestCase):
+    """No live fixture yet — synthetic payloads in the documented shape."""
+
+    PAYLOAD = json.dumps({"_embedded": {"events": [
+        {
+            "id": "G5v0Z9Yz", "name": "Kyle Kinane",
+            "url": "https://www.ticketmaster.com/event/G5v0Z9Yz",
+            "dates": {"start": {"localDate": "2026-10-12", "localTime": "19:30:00"}},
+            "sales": {"public": {"startDateTime": "2026-08-15T15:00:00Z"}},
+            "_embedded": {"venues": [{
+                "name": "Paramount Theatre",
+                "city": {"name": "Austin"}, "state": {"stateCode": "TX"},
+                "address": {"line1": "713 Congress Ave"},
+                "location": {"latitude": "30.2694", "longitude": "-97.7420"},
+            }]},
+        },
+        {
+            "id": "OTHER", "name": "Somebody Else Live",
+            "dates": {"start": {"localDate": "2026-10-13"}},
+        },
+    ]}})
+
+    def test_extracts_him_and_ignores_everyone_else(self):
+        events = Ticketmaster("fake-key")._parse(self.PAYLOAD)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].venue, "Paramount Theatre")
+        self.assertEqual(events[0].city, "Austin, TX")
+        self.assertEqual(events[0].starts_at, "2026-10-12T19:30")
+
+    def test_captures_the_onsale_time(self):
+        """
+        The field no other source gives us. It's what the tier-2 decision
+        deadline should be anchored to instead of a three-week guess.
+        """
+        ev = Ticketmaster("fake-key")._parse(self.PAYLOAD)[0]
+        self.assertEqual(ev.onsale_at, "2026-08-15T15:00:00Z")
+
+    def test_matches_a_multi_comedian_bill_via_attractions(self):
+        """He's often a supporting name on a showcase, not the event title."""
+        payload = json.dumps({"_embedded": {"events": [{
+            "id": "X", "name": "Moontower: Late Night Showcase",
+            "dates": {"start": {"localDate": "2026-04-18"}},
+            "_embedded": {"attractions": [{"name": "Ron Funches"}, {"name": "Kyle Kinane"}]},
+        }]}})
+        self.assertEqual(len(Ticketmaster("fake-key")._parse(payload)), 1)
+
+    def test_missing_key_is_config_not_emptiness(self):
+        r = Ticketmaster("")
+        r.api_key = ""
+        result = r.fetch()
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error_kind, "config")
 
 
 if __name__ == "__main__":

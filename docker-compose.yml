@@ -18,5 +18,9 @@ services:
     environment:
       - POLL_INTERVAL=3600   # hourly. Polite, and announcements don't land faster than that.
       - KAK_DB=/data/kak.sqlite3
+      # Consumer Key from developer.ticketmaster.com. Put it in a .env beside
+      # this file — never in the repo. Without it the source simply doesn't
+      # register, rather than parking a permanent error in the health readout.
+      - TICKETMASTER_API_KEY=${TICKETMASTER_API_KEY:-}
     volumes:
       - ./data:/data         # SQLite lives here. This is the only stateful thing.

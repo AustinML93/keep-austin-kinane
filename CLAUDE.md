@@ -57,7 +57,7 @@ No build step. Vanilla PWA + **two containers** (nginx + one Python service).
 | `kylekinane` | ✅ primary | Supabase JSON API. 78 events, ticket links, showtimes, lat/long. |
 | `capcity` | ✅ working | SeatEngine, 277 schema.org Events embedded in HTML. |
 | Moontower | ⏳ todo | `moontowercomedyfestival.com` (WordPress). **Seasonal — dormant is correct.** |
-| Ticketmaster | ⏳ todo | Needs a free API key. |
+| `ticketmaster` | ⚙️ built, needs key | Set `TICKETMASTER_API_KEY` (the **Consumer Key**, not the Secret). Only source with a real **on-sale time**. Registers only when the key is present. |
 | Bandsintown | ⛔ 403 | Needs a registered `app_id`. Moot — the official feed is better. |
 | Mothership | ⛔ blocked | HTTP 429 to everything. **Do not try to defeat it.** Known gap; stays visible in the health readout. |
 
@@ -86,6 +86,7 @@ python3 recon/probe_sources.py               # re-probe source viability
 
 ## Deploy
 
+- `TICKETMASTER_API_KEY` goes in the compose env / OMV `.env` — never the repo.
 - **Port 7730** (the 773 Chicago area code). Cloudflare tunnel routes
   `keepaustinkinane.austinmlapps.com` → `http://localhost:7730`. Mike owns tunnel/DNS.
 - OMV: `deploy@192.168.1.200`. Ship: commit + push, then `./deploy.sh` on the box.
