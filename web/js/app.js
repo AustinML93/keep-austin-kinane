@@ -73,6 +73,54 @@ const b64ToUint8 = (b64) => {
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 };
 
+/*
+ * Reflect the ACTUAL subscription state on every load.
+ *
+ * The button used to always read "Turn on notifications", so there was no way
+ * to tell whether you were covered — and for an app whose promise is that
+ * silence means nothing is happening, "am I even subscribed?" is not a question
+ * the user should have to guess at.
+ *
+ * It also silently re-registers an existing subscription with the server. That
+ * is idempotent (the server upserts on endpoint) and it HEALS the dangerous
+ * case: a subscription the browser still holds but the server has forgotten or
+ * dropped as stale. Without this, one of them could quietly stop receiving
+ * alerts while the app looked fine.
+ */
+async function refreshPushState() {
+  const btn = $("#push-btn");
+  if (!btn) return;
+
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    btn.classList.add("hidden");
+    return;
+  }
+  if (Notification.permission === "denied") {
+    btn.textContent = "Notifications are blocked";
+    btn.disabled = true;
+    btn.title = "Chrome ⋮ → Settings → Site settings → Notifications";
+    return;
+  }
+
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+
+  if (sub) {
+    btn.textContent = "Notifications on";
+    btn.disabled = true;
+    if (authed()) {
+      fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: token(), subscription: sub }),
+      }).catch(() => {});
+    }
+  } else {
+    btn.textContent = "Turn on notifications";
+    btn.disabled = false;
+  }
+}
+
 async function enablePush() {
   if (!authed()) return alert("Open your magic link first.");
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -94,8 +142,7 @@ async function enablePush() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token: token(), subscription: sub }),
   });
-  $("#push-btn").textContent = "Notifications on";
-  $("#push-btn").disabled = true;
+  await refreshPushState();
 }
 
 /* ── Rendering ───────────────────────────────────────────────────────────── */
@@ -326,3 +373,4 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");
 $("#push-btn")?.addEventListener("click", enablePush);
 load();
 loadBits();
+refreshPushState();
