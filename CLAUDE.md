@@ -153,6 +153,24 @@ giving a date with NO time (the official feed does — Cobb's 2026-12-04) folds 
 earliest known showtime at that venue via `loose_key()`, rather than becoming a phantom
 third row.
 
+## Install
+
+`web/manifest.webmanifest` MUST carry 192px and 512px icons or Chrome never offers to
+install — shipping `"icons": []` cost us exactly that. `web/icons/generate_icons.py`
+regenerates them from `source-beard-hat.png` with headless Chrome.
+
+The app captures `beforeinstallprompt` and offers a one-tap **Install Uncle BBQ** button.
+Chrome withholds that event on early visits and other browsers never fire it, so there's a
+plain-text fallback with the ⋮ → Add to Home screen route. Silence from Chrome must not
+leave someone with no way in.
+
+Android web push works in a plain tab — installation is not required for it (that's iOS).
+Installing gets the home-screen icon and app-like notifications.
+
+⚠️ The service worker is **network-first for navigations**. Cache-first pinned devices to
+whatever `index.html` they first loaded — including its manifest URL — so a phone stayed
+stuck on an icon-less build, unable to install, while the fix sat on the server.
+
 ## Manual entry
 
 `manual` is a **first-class source**. Discovery was always social — "sometimes it's my

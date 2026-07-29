@@ -173,3 +173,13 @@ footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem;
 }
 .src b { color: var(--fg); font-weight: 600; }
 .src.suspicious b, .src.down b, .src.config_failed b { color: var(--hot); }
+
+/* ── Install ─────────────────────────────────────────────────────────────── */
+.cta {
+  background: var(--hot); border: none; color: #1a1512; font: inherit;
+  font-weight: 700; font-size: 1.05rem; padding: .8rem 1.4rem; border-radius: 999px;
+  cursor: pointer; width: 100%; min-height: 52px;
+}
+.hint { color: var(--dim); font-size: .9rem; margin: .5rem 0 1.25rem; line-height: 1.5; }
+.hint b { color: var(--fg); }
+#install-box { margin-bottom: .5rem; }

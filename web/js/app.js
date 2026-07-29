@@ -22,6 +22,49 @@ const TOKEN_KEY = "kak_token";
 const token = () => localStorage.getItem(TOKEN_KEY);
 const authed = () => !!token();
 
+/* ── Install ─────────────────────────────────────────────────────────────── */
+
+/*
+ * Chrome fires beforeinstallprompt once it considers the app installable AND
+ * its engagement heuristic is satisfied. Capturing it lets us offer one button
+ * instead of "dig through the ⋮ menu", which is not a thing you can reasonably
+ * ask a second person to do.
+ *
+ * The event is NOT guaranteed to fire — Chrome withholds it on a first visit,
+ * and other browsers never send it — so there's a plain-text fallback. Silence
+ * from Chrome must not leave someone with no way in.
+ */
+let deferredInstall = null;
+const installed = () =>
+  window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstall = e;
+  $("#install-hint").classList.add("hidden");
+  $("#install-box").classList.remove("hidden");
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredInstall = null;
+  $("#install-box").classList.add("hidden");
+  $("#install-hint").classList.add("hidden");
+});
+
+$("#install-btn")?.addEventListener("click", async () => {
+  if (!deferredInstall) return;
+  deferredInstall.prompt();
+  await deferredInstall.userChoice;
+  deferredInstall = null;
+  $("#install-box").classList.add("hidden");
+});
+
+// If Chrome hasn't offered the event a few seconds in, show the manual route
+// rather than leaving a returning visitor with nothing.
+setTimeout(() => {
+  if (!installed() && !deferredInstall) $("#install-hint").classList.remove("hidden");
+}, 4000);
+
 /* ── Push ────────────────────────────────────────────────────────────────── */
 
 const b64ToUint8 = (b64) => {

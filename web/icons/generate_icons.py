@@ -3,10 +3,15 @@
 Generate the PWA icons from the source artwork, using headless Chrome.
 No image libraries needed.
 
-⚠️ These are REQUIRED, not decoration. Chrome will not offer "Add to Home
-Screen" without at least a 192px and a 512px icon in the manifest, and Android
-web push only works once the PWA is installed. An empty icons array silently
-costs you the entire notification feature.
+⚠️ These are REQUIRED, not decoration. Chrome will not offer to INSTALL the app
+without at least a 192px and a 512px icon in the manifest — an empty icons array
+means no install prompt at all, which is exactly what happened here.
+
+(Correction to an earlier note in this file: Android web push does NOT require
+installation — notifications work from a plain Chrome tab too. Installing gets
+you the home-screen icon, standalone chrome, and a notification that looks like
+it came from an app rather than a website. iOS is the one that genuinely
+requires Add to Home Screen, and neither of these two is on iOS.)
 
 Source art is `source-beard-hat.png` — the bearded trucker-cap mark, cropped
 from a Gemini-generated sheet Mike picked from. It is only 233px square, so the
