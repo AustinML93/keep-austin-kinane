@@ -14,14 +14,14 @@
  *    See CLAUDE.md — Cloudflare's 4h edge cache will otherwise serve the old one.
  */
 
-const CACHE = "kak-v5";
+const CACHE = "kak-v6";
 const SHELL = [
   "/",
   "/index.html",
-  "/css/styles.css?v=5",
-  "/js/app.js?v=5",
-  "/manifest.webmanifest?v=5",
-  "/icons/icon-192.png?v=5",
+  "/css/styles.css?v=6",
+  "/js/app.js?v=6",
+  "/manifest.webmanifest?v=6",
+  "/icons/icon-192.png?v=6",
 ];
 
 self.addEventListener("install", (e) => {
@@ -38,9 +38,32 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
+
   // Never cache the API — stale show data is exactly the lie this app exists
   // to avoid telling.
   if (url.pathname.startsWith("/api/")) return;
+
+  // NETWORK-FIRST FOR THE PAGE ITSELF.
+  //
+  // A cache-first shell pins whatever index.html you first loaded, and with it
+  // the manifest URL that index.html points at. That's how a phone ends up
+  // stuck on a version with no icons, unable to install, while the server has
+  // been serving the fix for an hour. The page is small; fetch it fresh when
+  // there's a network and fall back to cache only when there isn't.
+  if (e.request.mode === "navigate") {
+    e.respondWith(
+      fetch(e.request)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copy));
+          return res;
+        })
+        .catch(() => caches.match(e.request).then((hit) => hit || caches.match("/")))
+    );
+    return;
+  }
+
+  // Versioned assets (?v=N) are immutable by convention, so cache-first is safe.
   e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request)));
 });
 
