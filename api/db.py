@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -62,9 +63,62 @@ CREATE TABLE IF NOT EXISTS sources (
     last_error_kind      TEXT
 );
 
+CREATE TABLE IF NOT EXISTS users (
+    id         TEXT PRIMARY KEY,          -- 'mike', 'rob'
+    name       TEXT NOT NULL,
+    is_curator INTEGER DEFAULT 0,
+    token      TEXT UNIQUE NOT NULL,      -- magic-link token; no passwords
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    TEXT NOT NULL,
+    endpoint   TEXT NOT NULL UNIQUE,
+    p256dh     TEXT NOT NULL,
+    auth       TEXT NOT NULL,
+    user_agent TEXT,
+    created_at TEXT NOT NULL,
+    last_ok_at TEXT,
+    failures   INTEGER DEFAULT 0
+);
+
+-- The shared state. This is the fun part AND the thing that stops the nagging.
+-- 'cant_make_it' matters as much as 'got_tickets': without it the app cannot
+-- tell "I've made peace with missing this" from "my phone is in my pocket",
+-- and it will harass a man who already made his decision.
+CREATE TABLE IF NOT EXISTS user_events (
+    user_id         TEXT NOT NULL,
+    event_id        TEXT NOT NULL,
+    state           TEXT NOT NULL DEFAULT 'unseen',
+    acknowledged_at TEXT,
+    updated_at      TEXT NOT NULL,
+    PRIMARY KEY (user_id, event_id)
+);
+
+CREATE TABLE IF NOT EXISTS nags (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id  TEXT NOT NULL,
+    event_id TEXT NOT NULL,
+    level    INTEGER NOT NULL,
+    sent_at  TEXT NOT NULL,
+    channel  TEXT DEFAULT 'push',
+    ok       INTEGER DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_events_start ON events(starts_at);
 CREATE INDEX IF NOT EXISTS idx_events_tier  ON events(tier);
+CREATE INDEX IF NOT EXISTS idx_nags_lookup  ON nags(user_id, event_id, level);
 """
+
+# States that END the nagging. Any explicit decision counts — the app is not
+# entitled to keep shouting once a human has actually chosen.
+DECIDED = ("got_tickets", "cant_make_it", "passing")
 
 
 def now() -> str:
@@ -200,3 +254,104 @@ def record_health(con, source, result) -> str:
 
 def source_health(con) -> list[dict]:
     return [dict(r) for r in con.execute("SELECT * FROM sources ORDER BY id")]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Users, subscriptions, shared state
+# ──────────────────────────────────────────────────────────────────────────────
+
+def add_user(con, user_id: str, name: str, is_curator: bool = False) -> str:
+    token = secrets.token_urlsafe(32)
+    con.execute(
+        """INSERT INTO users (id, name, is_curator, token, created_at) VALUES (?,?,?,?,?)
+           ON CONFLICT(id) DO UPDATE SET name=excluded.name, is_curator=excluded.is_curator""",
+        (user_id, name, int(is_curator), token, now()),
+    )
+    con.commit()
+    return con.execute("SELECT token FROM users WHERE id=?", (user_id,)).fetchone()["token"]
+
+
+def user_by_token(con, token: str) -> dict | None:
+    row = con.execute("SELECT * FROM users WHERE token = ?", (token,)).fetchone()
+    return dict(row) if row else None
+
+
+def users(con) -> list[dict]:
+    return [dict(r) for r in con.execute("SELECT * FROM users ORDER BY id")]
+
+
+def save_subscription(con, user_id: str, sub: dict, user_agent: str | None) -> None:
+    keys = sub.get("keys", {})
+    con.execute(
+        """INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent, created_at)
+           VALUES (?,?,?,?,?,?)
+           ON CONFLICT(endpoint) DO UPDATE SET
+             user_id=excluded.user_id, p256dh=excluded.p256dh, auth=excluded.auth,
+             failures=0""",
+        (user_id, sub["endpoint"], keys.get("p256dh"), keys.get("auth"), user_agent, now()),
+    )
+    con.commit()
+
+
+def subscriptions_for(con, user_id: str) -> list[dict]:
+    return [dict(r) for r in con.execute(
+        "SELECT * FROM push_subscriptions WHERE user_id = ?", (user_id,))]
+
+
+def drop_subscription(con, endpoint: str) -> None:
+    """410/404 from the push service means the browser threw the sub away."""
+    con.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
+    con.commit()
+
+
+def set_state(con, user_id: str, event_id: str, state: str) -> None:
+    ts = now()
+    ack = ts if state in DECIDED else None
+    con.execute(
+        """INSERT INTO user_events (user_id, event_id, state, acknowledged_at, updated_at)
+           VALUES (?,?,?,?,?)
+           ON CONFLICT(user_id, event_id) DO UPDATE SET
+             state=excluded.state, acknowledged_at=excluded.acknowledged_at,
+             updated_at=excluded.updated_at""",
+        (user_id, event_id, state, ack, ts),
+    )
+    con.commit()
+
+
+def states_for_event(con, event_id: str) -> dict[str, str]:
+    return {r["user_id"]: r["state"] for r in con.execute(
+        "SELECT user_id, state FROM user_events WHERE event_id = ?", (event_id,))}
+
+
+def state_of(con, user_id: str, event_id: str) -> str:
+    row = con.execute(
+        "SELECT state FROM user_events WHERE user_id=? AND event_id=?",
+        (user_id, event_id)).fetchone()
+    return row["state"] if row else "unseen"
+
+
+def nags_sent(con, user_id: str, event_id: str) -> list[int]:
+    return [r["level"] for r in con.execute(
+        "SELECT level FROM nags WHERE user_id=? AND event_id=? ORDER BY level",
+        (user_id, event_id))]
+
+
+def record_nag(con, user_id: str, event_id: str, level: int, ok: bool,
+               channel: str = "push") -> None:
+    con.execute(
+        "INSERT INTO nags (user_id, event_id, level, sent_at, channel, ok) VALUES (?,?,?,?,?,?)",
+        (user_id, event_id, level, now(), channel, int(ok)),
+    )
+    con.commit()
+
+
+def get_setting(con, key: str) -> str | None:
+    row = con.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else None
+
+
+def set_setting(con, key: str, value: str) -> None:
+    con.execute(
+        "INSERT INTO settings (key, value) VALUES (?,?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+    con.commit()

@@ -1,16 +1,24 @@
 """
 Command line for the show tracker — the thing you run to see if it works.
 
-    python3 -m api.cli poll      fetch every source, store, tier, report
-    python3 -m api.cli shows     what's upcoming, by tier
-    python3 -m api.cli health    what each source can currently see
+    python3 -m api.cli poll        fetch every source, store, tier, report
+    python3 -m api.cli shows       what's upcoming, by tier
+    python3 -m api.cli health      what each source can currently see
+
+    python3 -m api.cli adduser mike Mike --curator     issue a magic link
+    python3 -m api.cli vapid                           show the push public key
+    python3 -m api.cli nags [--dry-run]                fire what's owed
+    python3 -m api.cli simulate                        fake a tier-1 Austin show
+    python3 -m api.cli unsimulate                      clear it
 """
 
 from __future__ import annotations
 
+import os
 import sys
 
 from . import db
+from .alerts import run_nags
 from .poll import poll_once
 
 TIER_LABEL = {1: "AUSTIN", 2: "ROAD TRIP", 3: "daydream"}
@@ -81,8 +89,101 @@ def cmd_health() -> int:
     return 0
 
 
+def cmd_adduser() -> int:
+    """adduser <id> <Name> [--curator]"""
+    if len(sys.argv) < 4:
+        print("usage: adduser <id> <Name> [--curator]")
+        return 1
+    uid, name = sys.argv[2], sys.argv[3]
+    curator = "--curator" in sys.argv
+    con = db.connect()
+    token = db.add_user(con, uid, name, curator)
+    base = os.environ.get("KAK_BASE_URL", "https://keepaustinkinane.austinmlapps.com")
+    print(f"\n{name} ({uid}){'  [curator]' if curator else ''}")
+    print(f"magic link:  {base}/?t={token}")
+    print("\nOpen it on their phone, then Add to Home Screen. The token lands in")
+    print("localStorage; there's no password to forget.\n")
+    con.close()
+    return 0
+
+
+def cmd_nags() -> int:
+    dry = "--dry-run" in sys.argv or "-n" in sys.argv
+    con = db.connect()
+    results = run_nags(con, dry_run=dry)
+    if not results:
+        print("nothing owed right now.")
+    for r in results:
+        mark = "DRY RUN" if r.get("dry_run") else f"sent={r['sent']} failed={r['failed']}"
+        print(f"\n[{r['user']}] tier {r['tier']} · level {r['level']} · {mark}")
+        print(f"  {r['title']}")
+        print(f"  {r['body']}")
+    con.close()
+    return 0
+
+
+def cmd_simulate() -> int:
+    """
+    Insert a fake tier-1 Austin show announced right now, so the full escalation
+    ladder can be watched end to end before trusting it with a real one.
+
+        python3 -m api.cli simulate
+        python3 -m api.cli nags --dry-run
+    """
+    from datetime import datetime, timedelta
+    con = db.connect()
+    # first_seen_at must be UTC-aware like every other timestamp the app writes.
+    # A naive local one lands hours off on any machine that isn't in Chicago,
+    # which silently skips the announcement and opens with a level-2 nag.
+    announced = db.now()
+    show = (datetime.now() + timedelta(days=42)).replace(
+        hour=19, minute=30, second=0, microsecond=0)
+    eid = "SIMULATED|cap city|19:30"
+    con.execute("DELETE FROM events WHERE id=?", (eid,))
+    con.execute("DELETE FROM nags WHERE event_id=?", (eid,))
+    con.execute("DELETE FROM user_events WHERE event_id=?", (eid,))
+    con.execute(
+        """INSERT INTO events (id, title, venue, city, starts_at, ticket_url, tier,
+                               distance_mi, artist_confidence, first_seen_at, last_seen_at)
+           VALUES (?,?,?,?,?,?,1,0,1.0,?,?)""",
+        (eid, "Kyle Kinane (SIMULATED)", "Cap City Comedy Club", "Austin, TX",
+         show.isoformat(timespec="minutes"), "https://capcitycomedy.com/",
+         announced, announced),
+    )
+    con.commit()
+    con.close()
+    print(f"simulated tier-1 Austin show on {show:%a %b %d}, announced just now.")
+    print("run:  python3 -m api.cli nags --dry-run")
+    print("clear: python3 -m api.cli unsimulate")
+    return 0
+
+
+def cmd_unsimulate() -> int:
+    con = db.connect()
+    for t in ("events", "nags", "user_events"):
+        col = "id" if t == "events" else "event_id"
+        con.execute(f"DELETE FROM {t} WHERE {col} LIKE 'SIMULATED%'")
+    con.commit()
+    con.close()
+    print("simulation cleared.")
+    return 0
+
+
+def cmd_vapid() -> int:
+    from .push import ensure_vapid
+    con = db.connect()
+    _, pub = ensure_vapid(con)
+    con.close()
+    print(f"VAPID public key:\n{pub}\n")
+    print("Stored in the settings table. Regenerating invalidates every existing")
+    print("push subscription, so don't.")
+    return 0
+
+
 def main() -> int:
-    cmds = {"poll": cmd_poll, "shows": cmd_shows, "health": cmd_health}
+    cmds = {"poll": cmd_poll, "shows": cmd_shows, "health": cmd_health,
+            "adduser": cmd_adduser, "nags": cmd_nags, "vapid": cmd_vapid,
+            "simulate": cmd_simulate, "unsimulate": cmd_unsimulate}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(__doc__)
         return 1

@@ -26,3 +26,20 @@ summary { color: var(--dim); font-size: .85rem; cursor: pointer; }
 .src { display: flex; gap: .75rem; justify-content: space-between;
        font-size: .8rem; color: var(--dim); padding: .35rem 0; }
 .src.suspicious b, .src.down b, .src.config_failed b { color: var(--hot); }
+
+.push {
+  background: none; border: 1px solid var(--line); color: var(--dim);
+  padding: .45rem .8rem; border-radius: 999px; font: inherit; font-size: .8rem;
+  cursor: pointer; margin-bottom: 1.5rem;
+}
+.push:disabled { opacity: .5; cursor: default; }
+.tix { color: var(--hot); font-size: .85rem; text-decoration: none; justify-self: start; }
+.scoreboard { display: flex; gap: 1rem; font-size: .8rem; color: var(--dim); margin-top: .35rem; }
+.who.got_tickets { color: var(--hot); font-weight: 600; }
+.who.cant_make_it, .who.passing { text-decoration: line-through; opacity: .7; }
+.acts { display: flex; gap: .5rem; margin-top: .5rem; }
+.acts button {
+  background: none; border: 1px solid var(--line); color: var(--fg);
+  padding: .3rem .7rem; border-radius: 999px; font: inherit; font-size: .75rem; cursor: pointer;
+}
+.acts button:first-child { border-color: var(--hot); color: var(--hot); }

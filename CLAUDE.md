@@ -75,7 +75,12 @@ could vanish without notice. Primary, but never the only source.
 python3 -m api.cli poll                      # fetch everything, store, tier, report
 python3 -m api.cli shows                     # what's upcoming, by tier
 python3 -m api.cli health                    # what each source can currently see
-python3 -m unittest discover -s tests -t .   # 28 tests, no deps, no network
+python3 -m api.cli adduser rob Rob            # issue a magic link
+python3 -m api.cli vapid                      # push public key (generated once, stored in DB)
+python3 -m api.cli simulate                   # fake a tier-1 Austin show...
+python3 -m api.cli nags --dry-run             # ...and watch the ladder without sending
+python3 -m api.cli unsimulate
+python3 -m unittest discover -s tests -t .   # 49 tests, no network
 python3 recon/probe_sources.py               # re-probe source viability
 ```
 
@@ -99,8 +104,36 @@ python3 recon/probe_sources.py               # re-probe source viability
 4. **LAN DNS via AdGuard Home** can hold a stale/negative cache after CF DNS changes.
    `docker restart adguardhome` clears it. Cellular bypasses it.
 
+## Alerting
+
+Web push via FCM. **Tier-1 notifications carry action buttons** (`GOT 'EM` /
+`CAN'T MAKE IT`) so a decision is one tap from the lock screen — that directly attacks the
+real failure, which was a notification arriving correctly and being swiped away at a red
+light. The SW can't read localStorage, so the auth token rides inside the encrypted push
+payload.
+
+Ladder (`api/nagger.py`): tier 1 is anchored to the **announcement** (0 / +2h / +6h / next
+9am / daily); tier 2 to the **decision deadline** (heads-up, −7d, −2d, deadline). Tier 3
+never nags.
+
+Three rules that are easy to break and are tested:
+1. **First contact is always L0.** Polling is hourly, so a show can be hours old before we
+   see it — catch-up must never open with the app complaining about silence the user was
+   never given a chance to break.
+2. **Catch-up jumps, it doesn't burst.** Two days offline = one notification, not five.
+3. **Only an explicit decision stops the ladder.** `seen` does not — opening the app is not
+   a decision. `cant_make_it` stops it as firmly as `got_tickets`.
+
+Nags are recorded on **attempt**, not on delivery success, or a user with no registered
+device would re-trigger the same level forever.
+
+## Voice files
+
+`api/voice.py` holds every string the app says. All of it ORIGINAL and unattributed — read
+the header before adding a line.
+
 ## Not built yet
 
-Web push + VAPID + notification action buttons (`GOT 'EM` / `CAN'T MAKE IT`), the nag
-escalation ladder, users/shared status, bits + the daily pick, and the voice pass.
+Bits (pool, daily pick, ratings, Rob's reactions, curator screens), the ntfy escalation
+fallback, Moontower + Ticketmaster sources, and the real voice pass on presentation.
 See **Next steps** in `SPEC.md`.
