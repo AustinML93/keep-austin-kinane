@@ -2,7 +2,7 @@
  * Service worker: shell cache + push.
  *
  * The important part is notificationclick. Android web push supports action
- * buttons, so a tier-1 alert carries GOT 'EM / CAN'T MAKE IT on the lock screen
+ * buttons, so a tier-1 alert carries GOT 'EM / CAN'T GO on the lock screen
  * and acknowledging never requires opening the app. That directly attacks the
  * real failure: a notification that arrived correctly and got swiped away at a
  * red light.
@@ -14,14 +14,14 @@
  *    See CLAUDE.md — Cloudflare's 4h edge cache will otherwise serve the old one.
  */
 
-const CACHE = "kak-v9";
+const CACHE = "kak-v10";
 const SHELL = [
   "/",
   "/index.html",
-  "/css/styles.css?v=9",
-  "/js/app.js?v=9",
-  "/manifest.webmanifest?v=9",
-  "/icons/icon-192.png?v=9",
+  "/css/styles.css?v=10",
+  "/js/app.js?v=10",
+  "/manifest.webmanifest?v=10",
+  "/icons/icon-192.png?v=10",
 ];
 
 self.addEventListener("install", (e) => {
@@ -125,24 +125,67 @@ self.addEventListener("push", (e) => {
   })());
 });
 
+const setState = (d, state) =>
+  fetch(`/api/events/${encodeURIComponent(d.event_id)}/state`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ state, token: d.token }),
+  });
+
+const ACK = {
+  got_tickets: "Got 'em. I'll stop.",
+  cant_make_it: "Noted — you can't go. I'll stop.",
+};
+
 self.addEventListener("notificationclick", (e) => {
   const d = e.notification.data || {};
   e.notification.close();
 
-  // An action button IS a decision — it stops the ladder.
+  /*
+   * An action button IS a decision — it stops the ladder.
+   *
+   * And because it stops the ladder, a MIS-TAP IS DANGEROUS. Two buttons sit
+   * side by side on a lock screen; hitting "can't make it" by accident silently
+   * switches off every future alert for a show you actually wanted. That's the
+   * soul-crushing miss arriving through a fat finger, so every decision made
+   * from a notification comes back with a confirmation and an UNDO.
+   */
   if (e.action === "got_tickets" || e.action === "cant_make_it") {
-    e.waitUntil(
-      fetch(`/api/events/${encodeURIComponent(d.event_id)}/state`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state: e.action, token: d.token }),
-      })
-        // On GOT 'EM, take them to the tickets. That's the whole job.
-        .then(() => (e.action === "got_tickets" && d.ticket_url
-          ? clients.openWindow(d.ticket_url)
-          : null))
-        .catch(() => clients.openWindow("/"))
-    );
+    e.waitUntil((async () => {
+      try {
+        await setState(d, e.action);
+        await self.registration.showNotification("Uncle BBQ", {
+          body: ACK[e.action],
+          tag: `ack-${d.event_id}`,
+          icon: "/icons/icon-192.png",
+          badge: "/icons/badge.png",
+          actions: [{ action: "undo", title: "UNDO" }],
+          data: d,
+        });
+        if (e.action === "got_tickets" && d.ticket_url) {
+          await clients.openWindow(d.ticket_url);
+        }
+      } catch (err) {
+        await receipt("action_failed", err && (err.message || err), d);
+        await clients.openWindow("/");
+      }
+    })());
+    return;
+  }
+
+  // Undo puts them back on the hook — 'unseen' resumes the ladder from wherever
+  // it had got to, rather than restarting it.
+  if (e.action === "undo") {
+    e.waitUntil((async () => {
+      await setState(d, "unseen").catch(() => {});
+      await self.registration.showNotification("Uncle BBQ", {
+        body: "Undone. You're still on the hook.",
+        tag: `ack-${d.event_id}`,
+        icon: "/icons/icon-192.png",
+        badge: "/icons/badge.png",
+        data: d,
+      });
+    })());
     return;
   }
 

@@ -3,7 +3,7 @@ Web push, with the feature that actually solves the observed failure.
 
 Mike's real miss wasn't "the notification never arrived." It was a notification
 that arrived correctly and got swiped away at a red light. So every tier-1 alert
-carries ACTION BUTTONS — `GOT 'EM` and `CAN'T MAKE IT` — right on the lock
+carries ACTION BUTTONS — `GOT 'EM` and `CAN'T GO` — right on the lock
 screen. Acknowledging is one tap and never requires opening the app.
 
 The service worker can't read localStorage, so the acknowledgement token rides
@@ -99,7 +99,9 @@ def build_payload(*, title: str, body: str, event_id: str, tier: int,
     if tier in (1, 2):
         actions = [
             {"action": "got_tickets", "title": "GOT 'EM"},
-            {"action": "cant_make_it", "title": "CAN'T MAKE IT"},
+            # Short on purpose: Android clips long action labels, and a clipped
+            # label next to a short one is how you tap the wrong thing.
+            {"action": "cant_make_it", "title": "CAN'T GO"},
         ]
     return {
         "title": title,

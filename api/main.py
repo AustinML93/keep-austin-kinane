@@ -32,7 +32,9 @@ app = FastAPI(title="Keep Austin Kinane", docs_url=None, redoc_url=None)
 _last_poll: dict = {"at": None, "new": 0, "error": None}
 _last_nag: dict = {"at": None, "sent": 0, "error": None}
 
-VALID_STATES = ("seen", "got_tickets", "cant_make_it", "passing")
+# 'unseen' is accepted so the notification's UNDO can put someone back on the
+# hook after a mis-tap. It is NOT in db.DECIDED, so the ladder resumes.
+VALID_STATES = ("unseen", "seen", "got_tickets", "cant_make_it", "passing")
 BIT_PLAYLIST = os.environ.get("KAK_BITS_PLAYLIST", "")
 
 
