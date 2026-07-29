@@ -80,7 +80,8 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     user_agent TEXT,
     created_at TEXT NOT NULL,
     last_ok_at TEXT,
-    failures   INTEGER DEFAULT 0
+    failures   INTEGER DEFAULT 0,
+    last_error TEXT
 );
 
 -- The shared state. This is the fun part AND the thing that stops the nagging.
@@ -171,7 +172,25 @@ def connect() -> sqlite3.Connection:
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")
     con.executescript(SCHEMA)
+    _migrate(con)
     return con
+
+
+def _migrate(con) -> None:
+    """
+    Additive column migrations. CREATE TABLE IF NOT EXISTS silently does nothing
+    for a table that already exists, so a new column has to be added explicitly
+    or the running deployment breaks on the first write.
+    """
+    wanted = {
+        "push_subscriptions": [("last_error", "TEXT")],
+    }
+    for table, cols in wanted.items():
+        have = {r["name"] for r in con.execute(f"PRAGMA table_info({table})")}
+        for name, decl in cols:
+            if name not in have:
+                con.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+    con.commit()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -419,6 +438,25 @@ def save_subscription(con, user_id: str, sub: dict, user_agent: str | None) -> N
 def subscriptions_for(con, user_id: str) -> list[dict]:
     return [dict(r) for r in con.execute(
         "SELECT * FROM push_subscriptions WHERE user_id = ?", (user_id,))]
+
+
+def mark_subscription_ok(con, endpoint: str) -> None:
+    con.execute(
+        "UPDATE push_subscriptions SET last_ok_at=?, failures=0, last_error=NULL "
+        "WHERE endpoint=?", (now(), endpoint))
+    con.commit()
+
+
+def mark_subscription_failed(con, endpoint: str, error: str) -> None:
+    """
+    Keep the reason, not just a count. "failed=2" is indistinguishable between a
+    dead device and a private key the library can't parse — and we lost an hour
+    to exactly that ambiguity.
+    """
+    con.execute(
+        "UPDATE push_subscriptions SET failures=failures+1, last_error=? WHERE endpoint=?",
+        (error[:300], endpoint))
+    con.commit()
 
 
 def drop_subscription(con, endpoint: str) -> None:

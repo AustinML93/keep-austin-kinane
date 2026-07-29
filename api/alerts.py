@@ -59,12 +59,12 @@ def run_nags(con, now: datetime | None = None, dry_run: bool = False) -> list[di
             title=title, body=body, event_id=p.event_id, tier=p.tier,
             ticket_url=ev["ticket_url"], token=me["token"], level=p.level,
         )
-        sent, failed = push.send_to_user(con, p.user_id, payload)
+        sent, failed, errors = push.send_to_user(con, p.user_id, payload)
 
         # Record the nag even when delivery failed. The ladder must advance on
         # *attempts*, or a user with no registered device would re-trigger the
         # same level forever and never escalate.
         db.record_nag(con, p.user_id, p.event_id, p.level, ok=sent > 0)
-        out.append({**record, "sent": sent, "failed": failed})
+        out.append({**record, "sent": sent, "failed": failed, "errors": errors})
 
     return out

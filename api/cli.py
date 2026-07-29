@@ -125,6 +125,8 @@ def cmd_nags() -> int:
         print(f"\n[{r['user']}] tier {r['tier']} · level {r['level']} · {mark}")
         print(f"  {r['title']}")
         print(f"  {r['body']}")
+        for err in r.get("errors", []):
+            print(f"  !! {err}")
     con.close()
     return 0
 
