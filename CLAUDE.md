@@ -95,7 +95,12 @@ python3 recon/probe_sources.py               # re-probe source viability
   `keepaustinkinane.austinmlapps.com` → `http://localhost:7730`. Mike owns tunnel/DNS.
 - GitHub: **https://github.com/AustinML93/keep-austin-kinane** (public). `gh` authed as
   AustinML93, commits authored as Mike Larsen.
-- OMV: `deploy@192.168.1.200`. Ship: commit + push, then `./deploy.sh` on the box.
+- OMV: **connect with `ssh omv`**, not `ssh deploy@192.168.1.200`. Both point at the same
+  place, but ssh_config matches on the *name you typed* — `deploy@192.168.1.200` misses the
+  `Host omv` block, never applies `IdentityFile ~/.ssh/homelab`, and fails with
+  `Permission denied (publickey,password)`, which reads like missing access when access is
+  fully configured. (`ssh-add -l` being empty is also normal here; the config's
+  IdentityFile does the work.) Ship: commit + push, then `./deploy.sh` on the box.
   **First-time setup and the push-verification checklist are in `DEPLOY.md`.**
 - ⚠️ `api/Dockerfile` is `python:3.12-slim`, **not alpine** — `pywebpush` pulls in
   `cryptography`, which on musl can fall through to a source build needing a Rust
