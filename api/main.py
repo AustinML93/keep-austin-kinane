@@ -19,18 +19,21 @@ import time
 from fastapi import Body, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from . import bits as bits_mod
 from . import db, push, venues, voice
 from .alerts import run_nags
 from .poll import poll_once
 
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "3600"))   # hourly; polite
 NAG_INTERVAL = int(os.environ.get("NAG_INTERVAL", "900"))      # 15min; the ladder is time-based
+BITS_INTERVAL = int(os.environ.get("BITS_INTERVAL", "21600"))  # 6h; nobody's in a hurry for a laugh
 
 app = FastAPI(title="Keep Austin Kinane", docs_url=None, redoc_url=None)
 _last_poll: dict = {"at": None, "new": 0, "error": None}
 _last_nag: dict = {"at": None, "sent": 0, "error": None}
 
 VALID_STATES = ("seen", "got_tickets", "cant_make_it", "passing")
+BIT_PLAYLIST = os.environ.get("KAK_BITS_PLAYLIST", "")
 
 
 def _loop(fn, interval, state):
@@ -45,6 +48,21 @@ def _loop(fn, interval, state):
 def _do_poll():
     report = poll_once()
     _last_poll.update(at=db.now(), new=len(report.new_events), error=None)
+
+
+def _do_bits_sync():
+    """
+    Pull the playlist in on a slow loop. Curation happens on YouTube, in the
+    moment; this just notices. A failure here must never be loud — a missed bit
+    is a missed laugh, not a missed show.
+    """
+    if not BIT_PLAYLIST:
+        return
+    con = db.connect()
+    try:
+        bits_mod.sync_playlist(con, BIT_PLAYLIST)
+    finally:
+        con.close()
 
 
 def _do_nag():
@@ -63,6 +81,9 @@ def start_workers() -> None:
                      daemon=True, name="poller").start()
     threading.Thread(target=_loop, args=(_do_nag, NAG_INTERVAL, _last_nag),
                      daemon=True, name="nagger").start()
+    if BIT_PLAYLIST:
+        threading.Thread(target=_loop, args=(_do_bits_sync, BITS_INTERVAL, {}),
+                         daemon=True, name="bits").start()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -204,6 +225,134 @@ def subscribe(payload: dict = Body(...), request: Request = None,
         db.save_subscription(con, user["id"], sub,
                              request.headers.get("user-agent") if request else None)
         return {"ok": True, "user": user["id"]}
+    finally:
+        con.close()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Bits
+# ──────────────────────────────────────────────────────────────────────────────
+
+VALID_RATINGS = ("struts", "fine", "gout")
+
+
+def _bit_view(con, b: dict, me: str | None) -> dict:
+    b = dict(b)
+    b["display_title"] = b.get("custom_title") or b.get("title")
+    b["ratings"] = bits_mod.ratings_for(con, b["id"])
+    b["my_rating"] = b["ratings"].get(me) if me else None
+    b["embed_url"] = (f"https://www.youtube-nocookie.com/embed/{b['video_id']}"
+                      if b.get("video_id") else None)
+    return b
+
+
+@app.get("/api/bits/today")
+def bit_of_the_day(authorization: str | None = Header(None)):
+    con = db.connect()
+    try:
+        me = None
+        if authorization:
+            try:
+                me = _user_from(con, authorization)["id"]
+            except HTTPException:
+                me = None
+        b = bits_mod.pick_for(con)
+        if not b:
+            return {"bit": None}
+        bits_mod.record_served(con, b["id"])
+        return {"bit": _bit_view(con, b, me)}
+    finally:
+        con.close()
+
+
+@app.get("/api/bits/specials")
+def bit_specials(authorization: str | None = Header(None)):
+    """The shelf. Never served as a daily bit — this is the hour-to-spend list."""
+    con = db.connect()
+    try:
+        me = None
+        if authorization:
+            try:
+                me = _user_from(con, authorization)["id"]
+            except HTTPException:
+                me = None
+        return {"specials": [_bit_view(con, b, me) for b in bits_mod.specials(con)]}
+    finally:
+        con.close()
+
+
+@app.post("/api/bits/{bit_id}/rate")
+def rate_bit(bit_id: str, payload: dict = Body(...),
+             authorization: str | None = Header(None)):
+    """Both users rate. Only the curator's rating changes the pool."""
+    rating = payload.get("rating")
+    if rating not in VALID_RATINGS:
+        raise HTTPException(400, f"rating must be one of {VALID_RATINGS}")
+    con = db.connect()
+    try:
+        user = _user_from(con, payload.get("token") or authorization)
+        bits_mod.rate(con, bit_id, user["id"], rating,
+                      is_curator=bool(user["is_curator"]))
+        return {"ok": True, "rating": rating, "counted": bool(user["is_curator"])}
+    finally:
+        con.close()
+
+
+@app.post("/api/bits")
+def add_bit(payload: dict = Body(...), authorization: str | None = Header(None)):
+    """The flexible path — paste any URL. Curator only."""
+    con = db.connect()
+    try:
+        user = _user_from(con, payload.get("token") or authorization)
+        if not user["is_curator"]:
+            raise HTTPException(403, "curation is Mike's job")
+        url = (payload.get("url") or "").strip()
+        if not url:
+            raise HTTPException(400, "url required")
+        item, is_new = bits_mod.add_url(con, url, added_by=user["id"])
+        if not item:
+            raise HTTPException(
+                400, "couldn't read that one — it may be private, deleted, or have "
+                     "embedding turned off")
+        if payload.get("title"):
+            bits_mod.rename(con, item["video_id"] or url, payload["title"])
+        return {"ok": True, "is_new": is_new, "title": item.get("title")}
+    finally:
+        con.close()
+
+
+@app.patch("/api/bits/{bit_id}")
+def rename_bit(bit_id: str, payload: dict = Body(...),
+               authorization: str | None = Header(None)):
+    """
+    Give a bit the name you actually use for it.
+
+    Worth having even though YouTube supplies a title — the way Mike and Rob
+    refer to a bit is the closest thing to real voice research this project gets.
+    """
+    con = db.connect()
+    try:
+        user = _user_from(con, payload.get("token") or authorization)
+        if not user["is_curator"]:
+            raise HTTPException(403, "curation is Mike's job")
+        bits_mod.rename(con, bit_id, (payload.get("title") or "").strip() or None)
+        return {"ok": True}
+    finally:
+        con.close()
+
+
+@app.post("/api/bits/sync")
+def sync_bits(payload: dict = Body(default={}),
+              authorization: str | None = Header(None)):
+    con = db.connect()
+    try:
+        user = _user_from(con, payload.get("token") or authorization)
+        if not user["is_curator"]:
+            raise HTTPException(403, "curation is Mike's job")
+        pl = (payload.get("playlist") or BIT_PLAYLIST).strip()
+        if not pl:
+            raise HTTPException(400, "no playlist configured (KAK_BITS_PLAYLIST)")
+        return bits_mod.sync_playlist(con, pl, added_by=user["id"])
     finally:
         con.close()
 

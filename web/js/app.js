@@ -149,11 +149,96 @@ function load() {
     fetch("/api/shows", { headers }).then((r) => r.json()),
     fetch("/api/health").then((r) => r.json()),
   ])
-    .then(([shows, health]) => { renderShows(shows); renderHealth(health); })
+    .then(([shows, health]) => {
+      if (shows.me) localStorage.setItem("kak_me", shows.me);
+      renderShows(shows);
+      renderHealth(health);
+    })
     .catch(() => {
       $("#status").textContent = "Can't reach the server. Which is its own kind of answer.";
       $("#status").classList.add("bad");
     });
+}
+
+/* ── Bits ────────────────────────────────────────────────────────────────── */
+
+const RATINGS = [
+  { r: "struts", label: "🔧 Shocks & Struts" },
+  { r: "fine",   label: "〰️ Runs Fine" },
+  { r: "gout",   label: "💥 Gout Flare-Up" },
+];
+
+function bitFrame(b, autoplay) {
+  const cls = `bit-frame${b.vertical ? " vertical" : ""}`;
+  if (!b.embed_url) {
+    return `<a class="${cls}" href="${b.url}" target="_blank" rel="noopener">
+              <img src="${b.thumbnail || ""}" alt=""></a>`;
+  }
+  // Thumbnail until tapped. Autoplay with sound is blocked everywhere, and a
+  // phone that starts talking when you open it is a phone you stop opening.
+  return autoplay
+    ? `<div class="${cls}"><iframe src="${b.embed_url}?autoplay=1&rel=0"
+         allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>`
+    : `<div class="${cls}">
+         <img src="${b.thumbnail || ""}" alt="">
+         <button class="play" data-play="${b.id}" aria-label="Play">▶</button>
+       </div>`;
+}
+
+function renderBit(b, me, autoplay = false) {
+  if (!b) { $("#bit").classList.add("hidden"); return; }
+  $("#bit").classList.remove("hidden");
+
+  const others = Object.entries(b.ratings || {})
+    .filter(([who]) => who !== me)
+    .map(([who, r]) => `${who} said ${RATINGS.find((x) => x.r === r)?.label || r}`)
+    .join(" · ");
+
+  $("#bit-body").innerHTML = `
+    ${bitFrame(b, autoplay)}
+    <p class="bit-title">${b.display_title || ""}</p>
+    <p class="bit-meta">${b.channel || ""}</p>
+    ${me ? `<div class="rate">${RATINGS.map((x) =>
+      `<button data-bit="${b.id}" data-r="${x.r}" class="${b.my_rating === x.r ? "on" : ""}">${
+        x.label}</button>`).join("")}</div>` : ""}
+    ${others ? `<p class="rate-note">${others}</p>` : ""}`;
+
+  $("#bit-body").querySelector("[data-play]")?.addEventListener("click", () =>
+    renderBit(b, me, true));
+
+  $("#bit-body").querySelectorAll(".rate button").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      await fetch(`/api/bits/${encodeURIComponent(btn.dataset.bit)}/rate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating: btn.dataset.r, token: token() }),
+      });
+      b.my_rating = btn.dataset.r;
+      b.ratings = { ...(b.ratings || {}), [me]: btn.dataset.r };
+      renderBit(b, me, autoplay);
+    }));
+}
+
+function renderShelf(list) {
+  if (!list || !list.length) { $("#shelf").classList.add("hidden"); return; }
+  $("#shelf").classList.remove("hidden");
+  $("#shelf-body").innerHTML = list.map((b) => `
+    <a class="special" href="${b.url}" target="_blank" rel="noopener">
+      ${b.thumbnail ? `<img src="${b.thumbnail}" alt="">` : ""}
+      <span><span class="t">${b.display_title || ""}</span><br>
+      <span class="c">${b.channel || ""}${b.official_where ? ` · also on ${b.official_where}` : ""}</span></span>
+    </a>`).join("");
+}
+
+function loadBits() {
+  const headers = authed() ? { Authorization: `Bearer ${token()}` } : {};
+  fetch("/api/bits/today", { headers }).then((r) => r.json())
+    .then((d) => {
+      const me = localStorage.getItem("kak_me");
+      renderBit(d.bit, me);
+    }).catch(() => {});
+  fetch("/api/bits/specials", { headers }).then((r) => r.json())
+    .then((d) => renderShelf(d.specials)).catch(() => {});
 }
 
 /* ── Manual add ──────────────────────────────────────────────────────────── */
@@ -197,3 +282,4 @@ $("#add-form")?.addEventListener("submit", async (e) => {
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");
 $("#push-btn")?.addEventListener("click", enablePush);
 load();
+loadBits();

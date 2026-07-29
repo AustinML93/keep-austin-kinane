@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Keep Austin Kinane</title>
-<link rel="manifest" href="/manifest.webmanifest?v=2">
+<link rel="manifest" href="/manifest.webmanifest?v=3">
 <meta name="theme-color" content="#141210">
-<link rel="stylesheet" href="/css/styles.css?v=2">
+<link rel="stylesheet" href="/css/styles.css?v=3">
 </head>
 <body>
 
@@ -22,6 +22,13 @@
 </header>
 
 <main>
+  <!-- Bit of the day. Thumbnail first, tap to play — autoplay with sound is
+       blocked everywhere, and nobody wants a phone that starts talking. -->
+  <section id="bit" class="bit hidden">
+    <h2>Bit of the day</h2>
+    <div id="bit-body"></div>
+  </section>
+
   <section id="tier1" class="tier hidden"><h2>Austin</h2><div class="rows"></div></section>
   <section id="tier2" class="tier hidden"><h2>Road trip</h2><div class="rows"></div></section>
   <section id="tier3" class="tier hidden"><h2>Daydream</h2><div class="rows"></div></section>
@@ -50,6 +57,12 @@
   </details>
 </main>
 
+<section id="shelf" class="hidden">
+  <h2>The shelf</h2>
+  <p class="shelf-note">Full sets. For when there's an hour.</p>
+  <div id="shelf-body"></div>
+</section>
+
 <footer>
   <details>
     <summary>What's being watched</summary>
@@ -57,6 +70,6 @@
   </details>
 </footer>
 
-<script src="/js/app.js?v=2"></script>
+<script src="/js/app.js?v=3"></script>
 </body>
 </html>

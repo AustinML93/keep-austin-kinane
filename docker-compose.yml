@@ -22,5 +22,10 @@ services:
       # this file — never in the repo. Without it the source simply doesn't
       # register, rather than parking a permanent error in the health readout.
       - TICKETMASTER_API_KEY=${TICKETMASTER_API_KEY:-}
+      # YouTube Data API v3 key. Optional — without it the playlist still syncs
+      # by scraping the page, but we can't tell a Short from a clip or detect
+      # vertical video, because oEmbed reports a fixed 200x113 for everything.
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+      - KAK_BITS_PLAYLIST=${KAK_BITS_PLAYLIST:-}
     volumes:
       - ./data:/data         # SQLite lives here. This is the only stateful thing.

@@ -160,6 +160,38 @@ add; either might hear first.
 - `manual` is excluded from the blind/health calculation — a human is not a scraper and
   cannot go dark.
 
+## Bits
+
+Two capture paths, one rating layer.
+
+- **Playlist sync** (`KAK_BITS_PLAYLIST`) is the fast path. Mike saves a clip on YouTube in
+  the moment he finds it; the app notices every 6h. **The playlist is an INBOX, not a
+  curated pool** — it's allowed to be messy, because the rating is the filter, not his
+  tidiness. Synced items land `active` and unrated: putting it in the playlist IS the
+  endorsement, and requiring him to process a queue is the chore this design avoids.
+- **Paste a URL** (`POST /api/bits`) handles anything else. oEmbed supplies title, channel,
+  and thumbnail with **no API key**, so adding is one field.
+- **Rename** anything. YouTube's title is SEO; "the one about the raccoon" is how they
+  actually refer to it, and that's the best voice research this project will get.
+
+Rotation weights: `struts` 3 · unrated 2 · `fine` 1 · `gout` blocked. **Unrated sits
+between the rated tiers on purpose** — new clips surface often enough to earn a verdict
+without crowding out what's known to land.
+
+⚠️ **`eligible()` excludes today's own history from the no-repeat rule.** Serving the bit
+records it; if that counted, the pick would change the instant anyone fetched it and Mike
+and Rob would see different "bits of the day". Found in a live run, guarded by
+`test_serving_the_bit_does_not_change_todays_pick`.
+
+⚠️ **Re-sync never resurrects a blocked bit or clobbers a custom title.**
+
+**YOUTUBE_API_KEY is optional but wanted.** Without it the playlist still syncs by scraping
+the page, but **oEmbed returns a fixed 200x113 with no duration** — verified — so we cannot
+tell a Short from a clip or detect vertical video. With the key: `contentDetails.duration`
+→ kind, real player dimensions → orientation, and `status.embeddable` before we try to play.
+
+Specials (>25min) are **never** the bit of the day. That's the shelf.
+
 ## Voice files
 
 `api/voice.py` holds every string the app says. All of it ORIGINAL and unattributed — read

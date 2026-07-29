@@ -111,9 +111,48 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT
 );
 
+-- Bits. Fed from two places (a synced YouTube playlist and pasted URLs) but
+-- rated in exactly one. The playlist is an inbox and is allowed to be messy;
+-- the curator's rating is the filter, not his tidiness.
+CREATE TABLE IF NOT EXISTS bits (
+    id              TEXT PRIMARY KEY,    -- youtube video id, or the url
+    provider        TEXT DEFAULT 'youtube',
+    video_id        TEXT,
+    url             TEXT NOT NULL,
+    title           TEXT,                -- the uploader's title
+    custom_title    TEXT,                -- "the one about the raccoon"
+    channel         TEXT,
+    thumbnail       TEXT,
+    duration_s      INTEGER DEFAULT 0,
+    kind            TEXT DEFAULT 'clip', -- short | clip | special
+    vertical        INTEGER DEFAULT 0,   -- 9:16 needs a different container
+    embeddable      INTEGER DEFAULT 1,
+    available       INTEGER DEFAULT 1,   -- still in the playlist / still exists
+    state           TEXT DEFAULT 'active', -- active | blocked (Gout Flare-Up)
+    added_by        TEXT,
+    source          TEXT,                -- playlist | manual
+    added_at        TEXT NOT NULL,
+    last_checked_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS bit_ratings (
+    bit_id   TEXT NOT NULL,
+    user_id  TEXT NOT NULL,
+    rating   TEXT NOT NULL,   -- struts | fine | gout
+    rated_at TEXT NOT NULL,
+    PRIMARY KEY (bit_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS bit_history (
+    bit_id    TEXT NOT NULL,
+    served_on TEXT NOT NULL,
+    PRIMARY KEY (bit_id, served_on)
+);
+
 CREATE INDEX IF NOT EXISTS idx_events_start ON events(starts_at);
 CREATE INDEX IF NOT EXISTS idx_events_tier  ON events(tier);
 CREATE INDEX IF NOT EXISTS idx_nags_lookup  ON nags(user_id, event_id, level);
+CREATE INDEX IF NOT EXISTS idx_bits_pool    ON bits(state, available, kind);
 """
 
 # States that END the nagging. Any explicit decision counts — the app is not

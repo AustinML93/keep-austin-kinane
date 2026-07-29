@@ -60,3 +60,36 @@ summary { color: var(--dim); font-size: .85rem; cursor: pointer; }
 #add-result.bad { color: var(--hot); }
 .manual-tag { font-size: .7rem; color: var(--dim); border: 1px solid var(--line);
   padding: .05rem .4rem; border-radius: 999px; }
+
+/* ── Bit of the day ─────────────────────────────────────────────────────── */
+.bit { margin-bottom: 2rem; }
+.bit-frame {
+  position: relative; width: 100%; background: #000; border-radius: 10px;
+  overflow: hidden; aspect-ratio: 16 / 9;
+}
+/* Shorts are 9:16. Letterboxing them into a landscape box wastes most of the
+   screen, so the container follows the video, capped so it can't run off. */
+.bit-frame.vertical { aspect-ratio: 9 / 16; max-height: 70vh; margin-inline: auto;
+  max-width: calc(70vh * 9 / 16); }
+.bit-frame iframe, .bit-frame img { width: 100%; height: 100%; border: 0;
+  display: block; object-fit: cover; }
+.bit-frame button.play {
+  position: absolute; inset: 0; width: 100%; height: 100%; border: 0; cursor: pointer;
+  background: rgba(0,0,0,.25); color: #fff; font-size: 3rem; line-height: 1;
+}
+.bit-title { font-weight: 600; margin: .6rem 0 .1rem; }
+.bit-meta { color: var(--dim); font-size: .8rem; }
+.rate { display: flex; gap: .4rem; margin-top: .7rem; flex-wrap: wrap; }
+.rate button {
+  background: none; border: 1px solid var(--line); color: var(--fg); font: inherit;
+  font-size: .78rem; padding: .35rem .7rem; border-radius: 999px; cursor: pointer;
+}
+.rate button.on { border-color: var(--hot); color: var(--hot); }
+.rate button[data-r="gout"].on { border-color: #c2452f; color: #e2694f; }
+.rate-note { color: var(--dim); font-size: .75rem; margin-top: .4rem; }
+.shelf-note { color: var(--dim); font-size: .82rem; margin: 0 0 .6rem; }
+.special { display: flex; gap: .7rem; padding: .6rem 0; border-top: 1px solid var(--line);
+  color: inherit; text-decoration: none; align-items: center; }
+.special img { width: 100px; border-radius: 6px; flex: none; }
+.special .t { font-weight: 600; font-size: .9rem; }
+.special .c { color: var(--dim); font-size: .78rem; }
