@@ -110,12 +110,27 @@ def sync_playlist(con, playlist_id: str, *, added_by: str = "mike") -> dict:
 
 
 def add_url(con, url: str, *, added_by: str) -> tuple[dict | None, bool]:
-    """The flexible path: paste anything."""
-    from .sources.youtube import classify, lookup
+    """
+    The flexible path: paste anything.
+
+    oEmbed carries no duration, so a pasted clip would default to kind='clip'
+    and become eligible for the bit of the day — including a full 70-minute
+    special, which is precisely what the shelf exists to prevent. So when a key
+    is available, enrich from the API before deciding what this thing is.
+    """
+    from .sources.youtube import api_key, classify, lookup, videos_api
 
     item = lookup(url)
     if not item:
         return None, False
+
+    vid = item.get("video_id")
+    key = api_key()
+    if vid and key:
+        full = videos_api([vid], key).get(vid)
+        if full:
+            item = {**item, **full}
+
     item.setdefault("duration_s", 0)
     item.setdefault("kind", classify(item.get("duration_s") or 0))
     is_new = upsert_bit(con, item, added_by=added_by, source="manual")

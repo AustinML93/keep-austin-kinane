@@ -87,7 +87,10 @@ python3 recon/probe_sources.py               # re-probe source viability
 
 ## Deploy
 
-- `TICKETMASTER_API_KEY` goes in the compose env / OMV `.env` — never the repo.
+- **Secrets live in `.env` beside `docker-compose.yml`** on the box — gitignored, and
+  `docker compose` reads it automatically. See `.env.example` for the full list
+  (`TICKETMASTER_API_KEY`, `YOUTUBE_API_KEY`, `KAK_BITS_PLAYLIST`). Never the repo.
+- For local CLI runs: `set -a; source .env; set +a` then `python3 -m api.cli …`
 - **Port 7730** (the 773 Chicago area code). Cloudflare tunnel routes
   `keepaustinkinane.austinmlapps.com` → `http://localhost:7730`. Mike owns tunnel/DNS.
 - OMV: `deploy@192.168.1.200`. Ship: commit + push, then `./deploy.sh` on the box.

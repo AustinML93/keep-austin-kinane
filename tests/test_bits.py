@@ -175,6 +175,25 @@ class TestPool(unittest.TestCase):
         state = self.con.execute("SELECT state FROM bits WHERE id=?", ("vid00000000",)).fetchone()
         self.assertEqual(state["state"], "blocked")
 
+    def test_unknown_duration_does_not_make_a_special_eligible(self):
+        """
+        oEmbed carries no duration, so a pasted URL defaults to kind='clip'.
+        If that clip is actually a 70-minute special it would land in the daily
+        rotation — exactly what the shelf exists to prevent. add_url enriches
+        from the API when a key is available; this guards the classification.
+        """
+        from api.sources.youtube import classify
+        self.assertEqual(classify(0), "clip")          # the unavoidable default
+        self.assertEqual(classify(70 * 60), "special")  # once we know, it moves
+
+        self.bits.upsert_bit(self.con, self.item("longpaste1", classify(70 * 60),
+                                                 duration_s=4200),
+                             added_by="mike", source="manual")
+        self.seed(3)
+        for d in range(1, 25):
+            got = self.bits.pick_for(self.con, date(2026, 8, 1) + timedelta(days=d))
+            self.assertNotEqual(got["id"], "longpaste1")
+
     # ── sync behaviour ───────────────────────────────────────────────────────
 
     def test_resync_does_not_resurrect_a_blocked_bit(self):

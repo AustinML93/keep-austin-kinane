@@ -13,6 +13,10 @@ Command line for the show tracker — the thing you run to see if it works.
 
     python3 -m api.cli add mike "Comedy Mothership" 2026-10-12 20:00
                                                        type in a show by hand
+
+    python3 -m api.cli bits sync <playlist_id>         pull the playlist in
+    python3 -m api.cli bits list                       what's in the pool
+    python3 -m api.cli bits today                      today's pick
 """
 
 from __future__ import annotations
@@ -203,6 +207,51 @@ def cmd_add() -> int:
     return 0
 
 
+def cmd_bits() -> int:
+    """bits sync [playlist_id] | bits list | bits today"""
+    from . import bits as bits_mod
+    from .sources.youtube import api_key
+
+    sub = sys.argv[2] if len(sys.argv) > 2 else "list"
+    con = db.connect()
+
+    if sub == "sync":
+        pl = sys.argv[3] if len(sys.argv) > 3 else os.environ.get("KAK_BITS_PLAYLIST", "")
+        if not pl:
+            print("usage: bits sync <playlist_id>   (or set KAK_BITS_PLAYLIST)")
+            return 1
+        print(f"key: {'YES — full metadata' if api_key() else 'no — scraping, no durations'}")
+        r = bits_mod.sync_playlist(con, pl)
+        print(f"via {r['via']}: fetched {r['fetched']}, added {r['added']}, dropped {r['dropped']}")
+        sub = "list"
+
+    if sub == "today":
+        b = bits_mod.pick_for(con)
+        if not b:
+            print("no bits in the pool yet.")
+        else:
+            print(f"\n  {b.get('custom_title') or b['title']}")
+            print(f"  {b['channel']}  ·  {b['kind']}  ·  {b['url']}")
+        con.close()
+        return 0
+
+    rows = con.execute("SELECT * FROM bits ORDER BY kind, added_at").fetchall()
+    if not rows:
+        print("pool is empty. try: bits sync <playlist_id>")
+    counts = {}
+    for r in rows:
+        counts[r["kind"]] = counts.get(r["kind"], 0) + 1
+        rating = bits_mod.curator_rating(con, r["id"]) or "-"
+        flag = "BLOCKED " if r["state"] != "active" else ""
+        dur = f"{r['duration_s']//60}:{r['duration_s']%60:02d}" if r["duration_s"] else "  ?  "
+        orient = "9:16" if r["vertical"] else "16:9"
+        print(f"  {r['kind']:<7} {orient}  {dur:>6}  {rating:<7} {flag}"
+              f"{(r['custom_title'] or r['title'] or '')[:52]}")
+    print(f"\n  {dict(counts)}")
+    con.close()
+    return 0
+
+
 def cmd_vapid() -> int:
     from .push import ensure_vapid
     con = db.connect()
@@ -218,7 +267,7 @@ def main() -> int:
     cmds = {"poll": cmd_poll, "shows": cmd_shows, "health": cmd_health,
             "adduser": cmd_adduser, "nags": cmd_nags, "vapid": cmd_vapid,
             "simulate": cmd_simulate, "unsimulate": cmd_unsimulate,
-            "add": cmd_add}
+            "add": cmd_add, "bits": cmd_bits}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(__doc__)
         return 1
