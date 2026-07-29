@@ -17,6 +17,7 @@ Command line for the show tracker — the thing you run to see if it works.
     python3 -m api.cli bits sync <playlist_id>         pull the playlist in
     python3 -m api.cli bits list                       what's in the pool
     python3 -m api.cli bits today                      today's pick
+    python3 -m api.cli receipts                        what devices reported back
 """
 
 from __future__ import annotations
@@ -254,6 +255,20 @@ def cmd_bits() -> int:
     return 0
 
 
+def cmd_receipts() -> int:
+    """What the devices actually reported back about recent pushes."""
+    con = db.connect()
+    rows = db.recent_receipts(con, 25)
+    if not rows:
+        print("no receipts yet — no push has reached a device since this was added.")
+    for r in rows:
+        print(f"  {r['at']}  {r['stage']:<16} {r['user_id'] or '?':<6} {r['event_id'] or ''}")
+        if r["detail"]:
+            print(f"      {r['detail'][:150]}")
+    con.close()
+    return 0
+
+
 def cmd_vapid() -> int:
     from .push import ensure_vapid
     con = db.connect()
@@ -269,7 +284,7 @@ def main() -> int:
     cmds = {"poll": cmd_poll, "shows": cmd_shows, "health": cmd_health,
             "adduser": cmd_adduser, "nags": cmd_nags, "vapid": cmd_vapid,
             "simulate": cmd_simulate, "unsimulate": cmd_unsimulate,
-            "add": cmd_add, "bits": cmd_bits}
+            "add": cmd_add, "bits": cmd_bits, "receipts": cmd_receipts}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(__doc__)
         return 1

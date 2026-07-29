@@ -14,14 +14,14 @@
  *    See CLAUDE.md — Cloudflare's 4h edge cache will otherwise serve the old one.
  */
 
-const CACHE = "kak-v8";
+const CACHE = "kak-v9";
 const SHELL = [
   "/",
   "/index.html",
-  "/css/styles.css?v=8",
-  "/js/app.js?v=8",
-  "/manifest.webmanifest?v=8",
-  "/icons/icon-192.png?v=8",
+  "/css/styles.css?v=9",
+  "/js/app.js?v=9",
+  "/manifest.webmanifest?v=9",
+  "/icons/icon-192.png?v=9",
 ];
 
 self.addEventListener("install", (e) => {
@@ -67,23 +67,62 @@ self.addEventListener("fetch", (e) => {
   e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request)));
 });
 
+/*
+ * A delivery RECEIPT, not just an accepted send.
+ *
+ * "sent=1" only means the push service took the message. It says nothing about
+ * whether this device ever received it or whether showNotification succeeded.
+ * For an app whose whole promise is that silence means nothing is happening,
+ * that gap is unacceptable — so the device reports back what actually happened.
+ */
+function receipt(stage, detail, data) {
+  return fetch("/api/push/receipt", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      stage,
+      detail: detail ? String(detail).slice(0, 300) : null,
+      event_id: (data && data.event_id) || null,
+      token: (data && data.token) || null,
+    }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
 self.addEventListener("push", (e) => {
   let p = {};
-  try { p = e.data ? e.data.json() : {}; } catch (_) { p = {}; }
+  let parseErr = null;
+  try { p = e.data ? e.data.json() : {}; } catch (err) { parseErr = err; p = {}; }
 
-  e.waitUntil(
-    self.registration.showNotification(p.title || "Kinane", {
-      body: p.body || "",
-      tag: p.tag,
-      renotify: p.renotify !== false,
-      requireInteraction: !!p.requireInteraction,
-      actions: p.actions || [],
-      data: p.data || {},
-      badge: "/icons/badge.png",
-      icon: "/icons/icon-192.png",
-      vibrate: p.data && p.data.tier === 1 ? [200, 80, 200, 80, 400] : [150],
-    })
-  );
+  const data = p.data || {};
+
+  e.waitUntil((async () => {
+    await receipt("received", parseErr ? `payload parse failed: ${parseErr}` : null, data);
+    try {
+      await self.registration.showNotification(p.title || "Kinane", {
+        body: p.body || "",
+        tag: p.tag,
+        // renotify REQUIRES tag — without one Chrome throws a TypeError and the
+        // notification never appears at all.
+        renotify: p.tag ? p.renotify !== false : false,
+        requireInteraction: !!p.requireInteraction,
+        actions: p.actions || [],
+        data,
+        badge: "/icons/badge.png",
+        icon: "/icons/icon-192.png",
+      });
+      await receipt("shown", null, data);
+    } catch (err) {
+      await receipt("show_failed", err && (err.message || err), data);
+      // Never leave the user with nothing. A bare notification beats silence.
+      try {
+        await self.registration.showNotification(p.title || "Kinane", { body: p.body || "" });
+        await receipt("shown_fallback", null, data);
+      } catch (err2) {
+        await receipt("fallback_failed", err2 && (err2.message || err2), data);
+      }
+    }
+  })());
 });
 
 self.addEventListener("notificationclick", (e) => {

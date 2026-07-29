@@ -107,6 +107,17 @@ CREATE TABLE IF NOT EXISTS nags (
     ok       INTEGER DEFAULT 1
 );
 
+-- What the DEVICE reports back. "accepted by the push service" and "appeared
+-- on a lock screen" are different facts, and only the second one matters.
+CREATE TABLE IF NOT EXISTS push_receipts (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id  TEXT,
+    event_id TEXT,
+    stage    TEXT NOT NULL,   -- received | shown | show_failed | shown_fallback | fallback_failed
+    detail   TEXT,
+    at       TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT
@@ -504,6 +515,19 @@ def record_nag(con, user_id: str, event_id: str, level: int, ok: bool,
         (user_id, event_id, level, now(), channel, int(ok)),
     )
     con.commit()
+
+
+def record_receipt(con, user_id: str | None, event_id: str | None,
+                   stage: str, detail: str | None) -> None:
+    con.execute(
+        "INSERT INTO push_receipts (user_id, event_id, stage, detail, at) VALUES (?,?,?,?,?)",
+        (user_id, event_id, stage, detail, now()))
+    con.commit()
+
+
+def recent_receipts(con, limit: int = 20) -> list[dict]:
+    return [dict(r) for r in con.execute(
+        "SELECT * FROM push_receipts ORDER BY id DESC LIMIT ?", (limit,))]
 
 
 def get_setting(con, key: str) -> str | None:

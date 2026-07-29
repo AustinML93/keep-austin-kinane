@@ -357,6 +357,30 @@ def sync_bits(payload: dict = Body(default={}),
         con.close()
 
 
+@app.post("/api/push/receipt")
+def push_receipt(payload: dict = Body(...)):
+    """
+    The device reporting what actually happened to a push.
+
+    Deliberately unauthenticated-tolerant: the service worker has a token in the
+    payload, but a receipt that fails because auth was fiddly is a receipt we
+    don't get, and the whole point is to stop guessing.
+    """
+    con = db.connect()
+    try:
+        user = None
+        tok = payload.get("token")
+        if tok:
+            u = db.user_by_token(con, tok)
+            user = u["id"] if u else None
+        db.record_receipt(con, user, payload.get("event_id"),
+                          (payload.get("stage") or "unknown")[:40],
+                          payload.get("detail"))
+        return {"ok": True}
+    finally:
+        con.close()
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Health — a user-facing feature, not ops hygiene
 # ──────────────────────────────────────────────────────────────────────────────
@@ -384,7 +408,16 @@ def health():
         "subscriptions": subs,
         "last_poll": _last_poll,
         "last_nag": _last_nag,
+        "recent_push_receipts": db_receipts(),
     }
+
+
+def db_receipts():
+    con = db.connect()
+    try:
+        return db.recent_receipts(con, 8)
+    finally:
+        con.close()
 
 
 @app.post("/api/poll")
