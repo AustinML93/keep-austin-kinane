@@ -1,0 +1,17 @@
+{
+  "name": "Keep Austin Kinane",
+  "short_name": "Uncle BBQ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#141210",
+  "theme_color": "#141210",
+  "icons": [],
+  "shortcuts": [
+    {
+      "name": "Kyle Kinane Shows",
+      "short_name": "Shows",
+      "url": "/?view=shows",
+      "description": "Upcoming Kyle Kinane dates. Also makes the app findable by searching 'Kinane' in the Android app drawer, which 'Uncle BBQ' alone would not."
+    }
+  ]
+}

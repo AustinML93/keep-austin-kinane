@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Keep Austin Kinane</title>
+<link rel="manifest" href="/manifest.webmanifest?v=1">
+<meta name="theme-color" content="#141210">
+<link rel="stylesheet" href="/css/styles.css?v=1">
+</head>
+<body>
+
+<!--
+  PLACEHOLDER SHELL. Deliberately plain.
+
+  The voice pass is a separate, later step — writing this copy properly is the
+  thing that makes the app worth opening, and doing it in throwaway placeholder
+  markup would waste it. Everything here is scaffolding for the real screens:
+  shared ticket status, escalating nags, the bit of the day, and a status
+  readout that actually sounds like something.
+-->
+
+<header>
+  <h1>Keep Austin Kinane</h1>
+  <p id="status" class="status">checking…</p>
+</header>
+
+<main>
+  <section id="tier1" class="tier hidden"><h2>Austin</h2><div class="rows"></div></section>
+  <section id="tier2" class="tier hidden"><h2>Road trip</h2><div class="rows"></div></section>
+  <section id="tier3" class="tier hidden"><h2>Daydream</h2><div class="rows"></div></section>
+  <p id="empty" class="empty hidden">Nothing on the calendar.</p>
+</main>
+
+<footer>
+  <details>
+    <summary>What's being watched</summary>
+    <div id="sources"></div>
+  </details>
+</footer>
+
+<script src="/js/app.js?v=1"></script>
+</body>
+</html>

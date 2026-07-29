@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# The SQLite DB is the only stateful thing — never commit it.
+# data/bits.seed.json IS committed; it's the curated pool.
+data/*.sqlite3
+data/*.sqlite3-wal
+data/*.sqlite3-shm
+
+recon/probe_summary.json
+
+# Contains the upnex eventPortalToken scraped from kylekinane.com. It's already
+# public on his site, but there's no reason to republish a vendor's bearer token
+# — and the tests only need the API payload, not this page.
+recon/raw/kylekinane-com.html

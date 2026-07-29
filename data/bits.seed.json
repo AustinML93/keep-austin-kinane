@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "Seed pool for the bit library. Mike-curated. Add entries as you find them —",
+    "no need to fill every field, the importer will backfill what it can.",
+    "",
+    "kind:           'short'   = Shorts / clips, eligible for bit of the day",
+    "                'special' = full sets, shelf only, never the daily bit",
+    "url:            wherever it currently plays",
+    "title:          how YOU refer to it, not the uploader's SEO title",
+    "official_where: legit streaming home if one exists (Netflix, Prime, his site).",
+    "                Matters most for specials — unofficial uploads rot.",
+    "note:           optional. why it's in here. shows up in the admin view."
+  ],
+
+  "shorts": [
+    {
+      "url": "",
+      "title": "",
+      "note": ""
+    }
+  ],
+
+  "specials": [
+    {
+      "url": "",
+      "title": "",
+      "official_where": "",
+      "note": ""
+    }
+  ]
+}
