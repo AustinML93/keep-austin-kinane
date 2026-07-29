@@ -144,6 +144,19 @@ def upsert_event(con, ev, tier: int, distance_mi: float | None) -> bool:
     key = ev.dedupe_key()
     ts = now()
     row = con.execute("SELECT id FROM events WHERE id = ?", (key,)).fetchone()
+
+    # A source that gives a date but no showtime (the official feed does this —
+    # Cobb's 2026-12-04) must not become a phantom extra row for a night another
+    # source already described with real times. Fold it into the earliest known
+    # showtime at that venue on that date instead.
+    if row is None and not ev.time:
+        loose = con.execute(
+            "SELECT id FROM events WHERE id LIKE ? ORDER BY id LIMIT 1",
+            (ev.loose_key() + "|%",),
+        ).fetchone()
+        if loose:
+            key, row = loose["id"], loose
+
     is_new = row is None
 
     if is_new:

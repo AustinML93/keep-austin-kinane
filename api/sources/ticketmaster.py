@@ -126,11 +126,30 @@ class Ticketmaster:
             longitude=_f(loc.get("longitude")),
             # The field nobody else gives us — a real on-sale time for the
             # tier-2 decision deadline instead of a three-week guess.
-            onsale_at=((e.get("sales") or {}).get("public") or {}).get("startDateTime"),
+            onsale_at=_onsale(e),
             ticket_url=e.get("url"),
             artist_confidence=0.95,
             raw=e,
         )
+
+
+def _onsale(e: dict) -> str | None:
+    """
+    Ticketmaster's on-sale time, with the sentinel filtered out.
+
+    Real payloads contain `1900-01-01T06:00:00Z` for events with no meaningful
+    on-sale date (already on sale, or unknown). Observed on 2 of the 8 events in
+    the first live pull.
+
+    Passing that through would be genuinely bad: the tier-2 decision deadline is
+    anchored to the on-sale time, so a 1900 deadline makes every escalation
+    level overdue at once, and a road trip announced this morning would get
+    "Last call" the same day.
+    """
+    raw = ((e.get("sales") or {}).get("public") or {}).get("startDateTime")
+    if not raw or raw < "2000":
+        return None
+    return raw
 
 
 def _f(v) -> float | None:

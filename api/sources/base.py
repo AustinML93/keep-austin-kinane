@@ -81,6 +81,17 @@ class Event:
         """
         return f"{self.date}|{norm(self.venue) or norm(self.city)}|{self.time}"
 
+    def loose_key(self) -> str:
+        """
+        Same show, ignoring the time.
+
+        The official feed sometimes lists a night with no showtime at all
+        (Cobb's, 2026-12-04) while Ticketmaster has the same night as a 7:00 and
+        a 9:15. Without this, the timeless entry becomes a phantom third row for
+        a night that only has two shows.
+        """
+        return f"{self.date}|{norm(self.venue) or norm(self.city)}"
+
 
 @dataclass
 class FetchResult:

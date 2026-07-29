@@ -57,7 +57,7 @@ No build step. Vanilla PWA + **two containers** (nginx + one Python service).
 | `kylekinane` | ✅ primary | Supabase JSON API. 78 events, ticket links, showtimes, lat/long. |
 | `capcity` | ✅ working | SeatEngine, 277 schema.org Events embedded in HTML. |
 | Moontower | ⏳ todo | `moontowercomedyfestival.com` (WordPress). **Seasonal — dormant is correct.** |
-| `ticketmaster` | ⚙️ built, needs key | Set `TICKETMASTER_API_KEY` (the **Consumer Key**, not the Secret). Only source with a real **on-sale time**. Registers only when the key is present. |
+| `ticketmaster` | ✅ working | Set `TICKETMASTER_API_KEY` (the **Consumer Key**, not the Secret). Only source with a real **on-sale time**. Registers only when the key is present. |
 | Bandsintown | ⛔ 403 | Needs a registered `app_id`. Moot — the official feed is better. |
 | Mothership | ⛔ blocked | HTTP 429 to everything. **Do not try to defeat it.** Known gap; stays visible in the health readout. |
 
@@ -127,6 +127,16 @@ Three rules that are easy to break and are tested:
 
 Nags are recorded on **attempt**, not on delivery success, or a user with no registered
 device would re-trigger the same level forever.
+
+⚠️ **Ticketmaster emits `1900-01-01T06:00:00Z` as an on-sale sentinel** (2 of 8 events in
+the first live pull). The tier-2 deadline is anchored to on-sale, so a past deadline makes
+every level overdue at once — "Last call" on announcement day. Filtered in the source AND
+defended in `decision_deadline()`. Treat any source's date fields as hostile.
+
+**Dedupe:** `dedupe_key()` is date|venue|time so a 7:00 and a 9:15 stay separate. A source
+giving a date with NO time (the official feed does — Cobb's 2026-12-04) folds into the
+earliest known showtime at that venue via `loose_key()`, rather than becoming a phantom
+third row.
 
 ## Voice files
 

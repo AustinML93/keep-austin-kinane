@@ -160,6 +160,15 @@ class TestTicketmaster(unittest.TestCase):
         }]}})
         self.assertEqual(len(Ticketmaster("fake-key")._parse(payload)), 1)
 
+    def test_sentinel_onsale_date_is_dropped(self):
+        """1900-01-01 means 'no on-sale date', not 'on sale since 1900'."""
+        payload = json.dumps({"_embedded": {"events": [{
+            "id": "S", "name": "Kyle Kinane",
+            "dates": {"start": {"localDate": "2026-10-15", "localTime": "20:00:00"}},
+            "sales": {"public": {"startDateTime": "1900-01-01T06:00:00Z"}},
+        }]}})
+        self.assertIsNone(Ticketmaster("fake-key")._parse(payload)[0].onsale_at)
+
     def test_missing_key_is_config_not_emptiness(self):
         r = Ticketmaster("")
         r.api_key = ""

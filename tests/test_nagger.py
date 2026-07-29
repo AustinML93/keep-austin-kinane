@@ -8,7 +8,8 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from api.nagger import LOCAL, due_level, tier1_due_at, tier2_due_at
+from api.nagger import (LOCAL, decision_deadline, due_level, tier1_due_at,
+                        tier2_due_at)
 
 # A Tuesday afternoon announcement — the realistic club-show shape.
 ANNOUNCED = datetime(2026, 9, 1, 14, 0, tzinfo=LOCAL)
@@ -116,6 +117,36 @@ class TestTier2Ladder(unittest.TestCase):
         lv = due_level(SHOW - timedelta(days=21), ANNOUNCED, 2, [0], SHOW,
                        austin_status="unknown")
         self.assertIsNotNone(lv)
+
+
+class TestBadOnsaleDates(unittest.TestCase):
+    """
+    Ticketmaster emits 1900-01-01 as a sentinel for "no meaningful on-sale
+    date" — 2 of the 8 events in the first live pull had it. A deadline in the
+    past makes every escalation level overdue at once, so a road trip announced
+    this morning would get "Last call" before lunch.
+    """
+
+    def test_ancient_onsale_falls_back_to_the_lead_time_guess(self):
+        sentinel = datetime(1900, 1, 1, 6, 0, tzinfo=LOCAL)
+        self.assertEqual(decision_deadline(sentinel, SHOW, ANNOUNCED),
+                         SHOW - timedelta(days=21))
+
+    def test_onsale_after_the_show_is_ignored(self):
+        self.assertEqual(decision_deadline(SHOW + timedelta(days=5), SHOW, ANNOUNCED),
+                         SHOW - timedelta(days=21))
+
+    def test_a_real_onsale_is_still_used(self):
+        onsale = ANNOUNCED + timedelta(days=10)
+        self.assertEqual(decision_deadline(onsale, SHOW, ANNOUNCED), onsale)
+
+    def test_sentinel_does_not_blast_the_whole_ladder(self):
+        """The bug this guards: L3 'last call' on announcement day."""
+        sentinel = datetime(1900, 1, 1, 6, 0, tzinfo=LOCAL)
+        self.assertEqual(due_level(ANNOUNCED, ANNOUNCED, 2, [], SHOW, onsale_at=sentinel), 0)
+        self.assertIsNone(
+            due_level(ANNOUNCED + timedelta(hours=1), ANNOUNCED, 2, [0], SHOW,
+                      onsale_at=sentinel))
 
 
 class TestTier3(unittest.TestCase):

@@ -91,8 +91,27 @@ def tier1_due_at(level: int, first_seen: datetime) -> datetime:
     return l3 + timedelta(days=level - 3)
 
 
-def decision_deadline(onsale_at: datetime | None, show_at: datetime) -> datetime:
-    return onsale_at or (show_at - DEFAULT_DECISION_LEAD)
+def decision_deadline(onsale_at: datetime | None, show_at: datetime,
+                      first_seen: datetime | None = None) -> datetime:
+    """
+    When the road-trip decision has to be made.
+
+    Defensive against a nonsense on-sale date, because one source is already
+    known to emit them — Ticketmaster uses 1900-01-01 as a sentinel for "no
+    meaningful on-sale date". The source filters that, but this is the layer
+    where a bad value does real damage: a deadline in the past makes every
+    escalation level overdue at once, so a show announced this morning would get
+    "Last call" before lunch. Anything at or before the announcement is not a
+    deadline, it's a data error — fall back to the lead-time guess.
+    """
+    fallback = show_at - DEFAULT_DECISION_LEAD
+    if not onsale_at:
+        return fallback
+    if onsale_at >= show_at:
+        return fallback
+    if first_seen and onsale_at <= first_seen:
+        return fallback
+    return onsale_at
 
 
 def tier2_due_at(level: int, first_seen: datetime, deadline: datetime) -> datetime:
@@ -126,7 +145,7 @@ def due_level(now: datetime, first_seen: datetime, tier: int, sent: list[int],
     else:
         # A road trip he's superseded gets the heads-up and then shuts up.
         max_level = 0 if austin_status == "superseded" else TIER2_LEVELS
-        deadline = decision_deadline(onsale_at, show_at)
+        deadline = decision_deadline(onsale_at, show_at, first_seen)
         due_at = lambda lv: tier2_due_at(lv, first_seen, deadline)
 
     if next_level > max_level:
