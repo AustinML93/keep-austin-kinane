@@ -14,14 +14,14 @@
  *    See CLAUDE.md — Cloudflare's 4h edge cache will otherwise serve the old one.
  */
 
-const CACHE = "kak-v10";
+const CACHE = "kak-v11";
 const SHELL = [
   "/",
   "/index.html",
-  "/css/styles.css?v=10",
-  "/js/app.js?v=10",
-  "/manifest.webmanifest?v=10",
-  "/icons/icon-192.png?v=10",
+  "/css/styles.css?v=11",
+  "/js/app.js?v=11",
+  "/manifest.webmanifest?v=11",
+  "/icons/icon-192.png?v=11",
 ];
 
 self.addEventListener("install", (e) => {
@@ -153,6 +153,15 @@ self.addEventListener("notificationclick", (e) => {
   if (e.action === "got_tickets" || e.action === "cant_make_it") {
     e.waitUntil((async () => {
       try {
+        // Report EXACTLY what Chrome handed us, before acting on it. Tapping the
+        // button labelled GOT 'EM twice produced cant_make_it, and guessing at
+        // why is how you fix the wrong thing.
+        await receipt(
+          "click",
+          `action=${e.action} labels=${JSON.stringify(
+            (e.notification.actions || []).map((a) => `${a.action}:${a.title}`))}`,
+          d
+        );
         await setState(d, e.action);
         await self.registration.showNotification("Uncle BBQ", {
           body: ACK[e.action],
