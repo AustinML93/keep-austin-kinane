@@ -93,7 +93,13 @@ python3 recon/probe_sources.py               # re-probe source viability
 - For local CLI runs: `set -a; source .env; set +a` then `python3 -m api.cli …`
 - **Port 7730** (the 773 Chicago area code). Cloudflare tunnel routes
   `keepaustinkinane.austinmlapps.com` → `http://localhost:7730`. Mike owns tunnel/DNS.
+- GitHub: **https://github.com/AustinML93/keep-austin-kinane** (public). `gh` authed as
+  AustinML93, commits authored as Mike Larsen.
 - OMV: `deploy@192.168.1.200`. Ship: commit + push, then `./deploy.sh` on the box.
+  **First-time setup and the push-verification checklist are in `DEPLOY.md`.**
+- ⚠️ `api/Dockerfile` is `python:3.12-slim`, **not alpine** — `pywebpush` pulls in
+  `cryptography`, which on musl can fall through to a source build needing a Rust
+  toolchain. Debian gets a prebuilt wheel. Don't "fix" it back to alpine.
 - Home-screen name is **Uncle BBQ** (manifest `short_name`, 9 chars — Android truncates
   around 12). The manifest `shortcuts` entry named "Kyle Kinane Shows" is what makes the app
   findable by searching "Kinane" in the app drawer; `short_name` alone would not be.
