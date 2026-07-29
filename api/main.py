@@ -19,7 +19,7 @@ import time
 from fastapi import Body, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from . import db, push, voice
+from . import db, push, venues, voice
 from .alerts import run_nags
 from .poll import poll_once
 
@@ -128,6 +128,57 @@ def set_state(event_id: str, payload: dict = Body(...),
         con.close()
 
 
+@app.get("/api/venues")
+def venue_suggestions():
+    """Autocomplete for the add form."""
+    return {"venues": venues.suggestions()}
+
+
+@app.post("/api/events/manual")
+def add_manual(payload: dict = Body(...), authorization: str | None = Header(None)):
+    """
+    Type in a show a human told you about.
+
+    Both users can add — the whole point is that discovery is social and either
+    of them might be the one who hears about it first.
+    """
+    con = db.connect()
+    try:
+        user = _user_from(con, payload.get("token") or authorization)
+        venue = (payload.get("venue") or "").strip()
+        date = (payload.get("date") or "").strip()
+        if not venue or not date:
+            raise HTTPException(400, "venue and date are required")
+
+        event_id, is_new = db.add_manual_event(
+            con, added_by=user["id"], venue=venue,
+            city=(payload.get("city") or "Austin, TX").strip(),
+            date=date, time_s=(payload.get("time") or "").strip()[:5],
+            ticket_url=(payload.get("ticket_url") or "").strip() or None,
+            note=(payload.get("note") or "").strip() or None,
+        )
+        row = con.execute("SELECT tier, distance_mi FROM events WHERE id=?", (event_id,)).fetchone()
+        return {"ok": True, "event_id": event_id, "is_new": is_new,
+                "tier": row["tier"], "distance_mi": row["distance_mi"]}
+    finally:
+        con.close()
+
+
+@app.delete("/api/events/{event_id}")
+def remove_manual(event_id: str, authorization: str | None = Header(None),
+                  token: str | None = None):
+    con = db.connect()
+    try:
+        _user_from(con, token or authorization)
+        if not db.delete_manual_event(con, event_id):
+            raise HTTPException(
+                400, "only hand-typed shows can be deleted, and only while no "
+                     "real source has confirmed them")
+        return {"ok": True}
+    finally:
+        con.close()
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Push
 # ──────────────────────────────────────────────────────────────────────────────
@@ -170,14 +221,17 @@ def health():
     finally:
         con.close()
 
-    blind = [s for s in sources if s["health"] in ("suspicious", "down", "config_failed")]
-    config_lost = any(s["health"] == "config_failed" for s in sources)
+    # 'manual' can't go blind — it's a human, not a scraper. Excluding it keeps
+    # the status readout about things that can actually fail.
+    watchers = [s for s in sources if s["kind"] != "manual"]
+    blind = [s for s in watchers if s["health"] in ("suspicious", "down", "config_failed")]
+    config_lost = any(s["health"] == "config_failed" for s in watchers)
     return {
         "sources": sources,
         "all_eyes_open": not blind,
         "blind": [s["id"] for s in blind],
         "status_line": voice.status_line(
-            len(sources), [s["name"] for s in blind], config_lost),
+            len(watchers), [s["name"] for s in blind], config_lost),
         "subscriptions": subs,
         "last_poll": _last_poll,
         "last_nag": _last_nag,

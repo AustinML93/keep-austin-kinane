@@ -10,6 +10,9 @@ Command line for the show tracker — the thing you run to see if it works.
     python3 -m api.cli nags [--dry-run]                fire what's owed
     python3 -m api.cli simulate                        fake a tier-1 Austin show
     python3 -m api.cli unsimulate                      clear it
+
+    python3 -m api.cli add mike "Comedy Mothership" 2026-10-12 20:00
+                                                       type in a show by hand
 """
 
 from __future__ import annotations
@@ -169,6 +172,37 @@ def cmd_unsimulate() -> int:
     return 0
 
 
+def cmd_add() -> int:
+    """add <user> <venue> <YYYY-MM-DD> [HH:MM] [--city "X"] [--url U] [--note N]"""
+    if len(sys.argv) < 5:
+        print('usage: add <user> "<venue>" <YYYY-MM-DD> [HH:MM] [--city "Austin, TX"] '
+              '[--url <ticket url>] [--note "..."]')
+        return 1
+    user, venue, date = sys.argv[2], sys.argv[3], sys.argv[4]
+    rest = sys.argv[5:]
+    time_s = rest[0] if rest and ":" in rest[0] and not rest[0].startswith("--") else ""
+
+    def opt(flag, default=None):
+        return rest[rest.index(flag) + 1] if flag in rest else default
+
+    con = db.connect()
+    if not con.execute("SELECT 1 FROM users WHERE id=?", (user,)).fetchone():
+        print(f"no such user '{user}'. try: adduser {user} {user.title()}")
+        return 1
+    eid, is_new = db.add_manual_event(
+        con, added_by=user, venue=venue, city=opt("--city", "Austin, TX"),
+        date=date, time_s=time_s, ticket_url=opt("--url"), note=opt("--note"))
+    row = con.execute("SELECT tier, distance_mi, city FROM events WHERE id=?", (eid,)).fetchone()
+    d = f"{row['distance_mi']:.0f}mi" if row["distance_mi"] is not None else "unknown distance"
+    print(f"\n{'added' if is_new else 'merged into an existing show'}: {venue} — {date} {time_s}")
+    print(f"  {TIER_LABEL[row['tier']]}  ({row['city']}, {d})")
+    if row["tier"] == 3:
+        print("  NOTE: tier 3 never notifies. If that's wrong, the venue or city")
+        print("        wasn't recognised — try adding the city explicitly.")
+    con.close()
+    return 0
+
+
 def cmd_vapid() -> int:
     from .push import ensure_vapid
     con = db.connect()
@@ -183,7 +217,8 @@ def cmd_vapid() -> int:
 def main() -> int:
     cmds = {"poll": cmd_poll, "shows": cmd_shows, "health": cmd_health,
             "adduser": cmd_adduser, "nags": cmd_nags, "vapid": cmd_vapid,
-            "simulate": cmd_simulate, "unsimulate": cmd_unsimulate}
+            "simulate": cmd_simulate, "unsimulate": cmd_unsimulate,
+            "add": cmd_add}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(__doc__)
         return 1

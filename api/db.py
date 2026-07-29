@@ -196,6 +196,77 @@ def upsert_event(con, ev, tier: int, distance_mi: float | None) -> bool:
     return is_new
 
 
+def add_manual_event(con, *, added_by: str, venue: str, city: str, date: str,
+                     time_s: str = "", ticket_url: str | None = None,
+                     note: str | None = None) -> tuple[str, bool]:
+    """
+    A show a human typed in. Returns (event_id, is_new).
+
+    This is a first-class source, not a workaround. The original problem was
+    that discovery is social — "sometimes it's my friend, and sometimes it's
+    just someone that knows we love him" — and until now the app had no home for
+    that signal. It's also the only thing that will ever catch a Comedy
+    Mothership booking or a surprise drop-in, since their site blocks us and no
+    aggregator carries them.
+
+    Manual events merge with automatic ones by the normal dedupe key, so a show
+    typed in from a text message quietly becomes the same row when a real source
+    catches up to it.
+    """
+    from .sources.base import Event
+    from .tiering import tier_for
+    from .venues import canonical, locate
+
+    lat, lon, resolved_city = locate(venue, city)
+    # Canonicalise BEFORE building the event: the dedupe key contains the venue
+    # name, so "the Mothership" and "Comedy Mothership" must normalise to the
+    # same string or they become two shows on the same night.
+    venue = canonical(venue)
+    ev = Event(
+        source_id="manual",
+        external_id=f"manual-{added_by}-{date}",
+        starts_at=f"{date}T{time_s}" if time_s else date,
+        title=venue,
+        venue=venue,
+        city=resolved_city or city,
+        latitude=lat,
+        longitude=lon,
+        ticket_url=ticket_url or None,
+        artist_confidence=1.0,   # a human vouched for it
+        raw={"added_by": added_by, "note": note, "manual": True},
+    )
+    tier, dist = tier_for(lat, lon, ev.city, None)
+    is_new = upsert_event(con, ev, tier, dist)
+
+    con.execute(
+        """INSERT INTO sources (id, name, kind, seasonal, health, last_success_at,
+                                last_total_seen, baseline_total)
+           VALUES ('manual','Typed in by hand','manual',0,'ok',?,0,0)
+           ON CONFLICT(id) DO UPDATE SET last_success_at=excluded.last_success_at""",
+        (now(),),
+    )
+    con.commit()
+    return ev.dedupe_key(), is_new
+
+
+def delete_manual_event(con, event_id: str) -> bool:
+    """
+    Remove a hand-typed show. Only ever removes events that came from `manual`
+    and nowhere else — if a real source has since confirmed the same show,
+    deleting the manual entry must not delete the show.
+    """
+    srcs = [r["source_id"] for r in con.execute(
+        "SELECT source_id FROM event_sources WHERE event_id = ?", (event_id,))]
+    if srcs != ["manual"]:
+        return False
+    con.execute("DELETE FROM event_sources WHERE event_id = ?", (event_id,))
+    con.execute("DELETE FROM user_events WHERE event_id = ?", (event_id,))
+    con.execute("DELETE FROM nags WHERE event_id = ?", (event_id,))
+    con.execute("DELETE FROM events WHERE id = ?", (event_id,))
+    con.commit()
+    return True
+
+
 def upcoming(con, today: str | None = None) -> list[dict]:
     today = today or datetime.now().date().isoformat()
     rows = con.execute(

@@ -156,6 +156,44 @@ function load() {
     });
 }
 
+/* ── Manual add ──────────────────────────────────────────────────────────── */
+
+fetch("/api/venues")
+  .then((r) => r.json())
+  .then(({ venues }) => {
+    $("#venue-list").innerHTML = venues.map((v) => `<option value="${v}">`).join("");
+  })
+  .catch(() => {});
+
+const TIER_NAME = { 1: "Austin — full alarm", 2: "road trip", 3: "daydream (won't notify)" };
+
+$("#add-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const out = $("#add-result");
+  if (!authed()) { out.textContent = "Open your magic link first."; out.className = "bad"; return; }
+
+  const body = Object.fromEntries(new FormData(e.target).entries());
+  const res = await fetch("/api/events/manual", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...body, token: token() }),
+  }).then((r) => r.json()).catch(() => null);
+
+  if (!res || !res.ok) {
+    out.textContent = (res && res.detail) || "Couldn't add it.";
+    out.className = "bad";
+    return;
+  }
+  // Tell them which tier it landed in — a show that silently lands in tier 3
+  // will never notify anyone, and that's exactly the failure to avoid.
+  out.textContent = `${res.is_new ? "Added" : "Merged into a show we already had"} · ${
+    TIER_NAME[res.tier]}`;
+  out.className = res.tier === 3 ? "bad" : "";
+  e.target.reset();
+  e.target.city.value = "Austin, TX";
+  load();
+});
+
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");
 $("#push-btn")?.addEventListener("click", enablePush);
 load();

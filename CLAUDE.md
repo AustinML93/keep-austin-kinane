@@ -59,7 +59,8 @@ No build step. Vanilla PWA + **two containers** (nginx + one Python service).
 | Moontower | ⏳ todo | `moontowercomedyfestival.com` (WordPress). **Seasonal — dormant is correct.** |
 | `ticketmaster` | ✅ working | Set `TICKETMASTER_API_KEY` (the **Consumer Key**, not the Secret). Only source with a real **on-sale time**. Registers only when the key is present. |
 | Bandsintown | ⛔ 403 | Needs a registered `app_id`. Moot — the official feed is better. |
-| Mothership | ⛔ blocked | HTTP 429 to everything. **Do not try to defeat it.** Known gap; stays visible in the health readout. |
+| Mothership | ⛔ blocked | HTTP 429 to everything. **Do not try to defeat it.** Confirmed NOT carried by Ticketmaster either. Covered only by `manual`. |
+| `manual` | ✅ working | Hand-typed shows. A first-class source, not a fallback — see below. |
 
 ⚠️ **The official feed is a two-step fetch: scrape `locationId` + `eventPortalToken` from
 kylekinane.com, then call the API.** Never hardcode the token — when it rotates, a
@@ -137,6 +138,27 @@ defended in `decision_deadline()`. Treat any source's date fields as hostile.
 giving a date with NO time (the official feed does — Cobb's 2026-12-04) folds into the
 earliest known showtime at that venue via `loose_key()`, rather than becoming a phantom
 third row.
+
+## Manual entry
+
+`manual` is a **first-class source**. Discovery was always social — "sometimes it's my
+friend, and sometimes it's just someone that knows we love him" — and it's the only thing
+that will ever catch a **Comedy Mothership** booking or a surprise drop-in. Both users can
+add; either might hear first.
+
+- `api/venues.py` maps hand-typed venue names to approximate coordinates so tiering works
+  without a geocoding service. Coordinates are **downtown-block accurate on purpose** — all
+  they feed is a distance bucket.
+- ⚠️ **Venue names are canonicalised before the dedupe key is built.** The key is
+  `date|venue|time`, so "the Mothership" and "Comedy Mothership" must collapse to one
+  string or they're two shows on the same night — one permanently unacknowledged and still
+  nagging.
+- Manual events **merge** with automatic ones by the normal key, so a show typed in from a
+  text quietly becomes the same row when a real source catches up.
+- `delete_manual_event` refuses if any real source has confirmed the show. Deleting your
+  note must never delete the show.
+- `manual` is excluded from the blind/health calculation — a human is not a scraper and
+  cannot go dark.
 
 ## Voice files
 

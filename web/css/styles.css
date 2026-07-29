@@ -43,3 +43,20 @@ summary { color: var(--dim); font-size: .85rem; cursor: pointer; }
   padding: .3rem .7rem; border-radius: 999px; font: inherit; font-size: .75rem; cursor: pointer;
 }
 .acts button:first-child { border-color: var(--hot); color: var(--hot); }
+
+#add-box { margin-top: 2.5rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+#add-form { display: flex; flex-direction: column; gap: .5rem; margin-top: .75rem; }
+#add-form input {
+  background: #1c1916; border: 1px solid var(--line); color: var(--fg);
+  padding: .55rem .7rem; border-radius: 6px; font: inherit; font-size: .9rem;
+}
+#add-form .row { display: flex; gap: .5rem; }
+#add-form .row input { flex: 1; min-width: 0; }
+#add-form button {
+  background: var(--hot); border: none; color: #1a1512; font: inherit;
+  font-weight: 600; padding: .55rem; border-radius: 6px; cursor: pointer;
+}
+#add-result { font-size: .85rem; color: var(--dim); margin: .25rem 0 0; }
+#add-result.bad { color: var(--hot); }
+.manual-tag { font-size: .7rem; color: var(--dim); border: 1px solid var(--line);
+  padding: .05rem .4rem; border-radius: 999px; }

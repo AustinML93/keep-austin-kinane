@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Keep Austin Kinane</title>
-<link rel="manifest" href="/manifest.webmanifest?v=1">
+<link rel="manifest" href="/manifest.webmanifest?v=2">
 <meta name="theme-color" content="#141210">
-<link rel="stylesheet" href="/css/styles.css?v=1">
+<link rel="stylesheet" href="/css/styles.css?v=2">
 </head>
 <body>
 
@@ -26,6 +26,28 @@
   <section id="tier2" class="tier hidden"><h2>Road trip</h2><div class="rows"></div></section>
   <section id="tier3" class="tier hidden"><h2>Daydream</h2><div class="rows"></div></section>
   <p id="empty" class="empty hidden">Nothing on the calendar.</p>
+
+  <!--
+    Manual add. Not a fallback — a first-class source. Discovery was always
+    social, and this is the only thing that will ever catch a Comedy Mothership
+    booking (their site blocks us, no aggregator carries them) or a drop-in.
+  -->
+  <details id="add-box">
+    <summary>Somebody told you about a show</summary>
+    <form id="add-form">
+      <input name="venue" list="venue-list" placeholder="Venue (e.g. Comedy Mothership)" required>
+      <datalist id="venue-list"></datalist>
+      <input name="city" placeholder="City" value="Austin, TX">
+      <span class="row">
+        <input name="date" type="date" required>
+        <input name="time" type="time">
+      </span>
+      <input name="ticket_url" type="url" placeholder="Ticket link (optional)">
+      <input name="note" placeholder="Who told you? (optional)">
+      <button type="submit">Add it</button>
+      <p id="add-result"></p>
+    </form>
+  </details>
 </main>
 
 <footer>
@@ -35,6 +57,6 @@
   </details>
 </footer>
 
-<script src="/js/app.js?v=1"></script>
+<script src="/js/app.js?v=2"></script>
 </body>
 </html>
