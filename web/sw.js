@@ -14,14 +14,14 @@
  *    See CLAUDE.md — Cloudflare's 4h edge cache will otherwise serve the old one.
  */
 
-const CACHE = "kak-v4";
+const CACHE = "kak-v5";
 const SHELL = [
   "/",
   "/index.html",
-  "/css/styles.css?v=4",
-  "/js/app.js?v=4",
-  "/manifest.webmanifest?v=4",
-  "/icons/icon-192.png?v=4",
+  "/css/styles.css?v=5",
+  "/js/app.js?v=5",
+  "/manifest.webmanifest?v=5",
+  "/icons/icon-192.png?v=5",
 ];
 
 self.addEventListener("install", (e) => {
