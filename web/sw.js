@@ -2,10 +2,14 @@
  * Service worker: shell cache + push.
  *
  * The important part is notificationclick. Android web push supports action
- * buttons, so a tier-1 alert carries GOT 'EM / CAN'T GO on the lock screen
- * and acknowledging never requires opening the app. That directly attacks the
- * real failure: a notification that arrived correctly and got swiped away at a
- * red light.
+ * buttons, so a tier-1 alert carries a single GOT 'EM on the lock screen and
+ * acknowledging never requires opening the app. That directly attacks the real
+ * failure: a notification that arrived correctly and got swiped away at a red
+ * light.
+ *
+ * cant_make_it is still handled here — notifications sent before the switch to
+ * one button may still be sitting on a phone, and their buttons must keep
+ * working rather than silently doing nothing.
  *
  * Service workers can't read localStorage, so the auth token rides inside the
  * encrypted push payload.
@@ -14,14 +18,14 @@
  *    See CLAUDE.md — Cloudflare's 4h edge cache will otherwise serve the old one.
  */
 
-const CACHE = "kak-v11";
+const CACHE = "kak-v12";
 const SHELL = [
   "/",
   "/index.html",
-  "/css/styles.css?v=11",
-  "/js/app.js?v=11",
-  "/manifest.webmanifest?v=11",
-  "/icons/icon-192.png?v=11",
+  "/css/styles.css?v=12",
+  "/js/app.js?v=12",
+  "/manifest.webmanifest?v=12",
+  "/icons/icon-192.png?v=12",
 ];
 
 self.addEventListener("install", (e) => {

@@ -3,8 +3,10 @@ Web push, with the feature that actually solves the observed failure.
 
 Mike's real miss wasn't "the notification never arrived." It was a notification
 that arrived correctly and got swiped away at a red light. So every tier-1 alert
-carries ACTION BUTTONS — `GOT 'EM` and `CAN'T GO` — right on the lock
-screen. Acknowledging is one tap and never requires opening the app.
+carries a single ACTION BUTTON — `GOT 'EM` — right on the lock screen.
+Acknowledging is one tap and never requires opening the app.
+
+Only one, and only the safe one: see build_payload for why two was a mistake.
 
 The service worker can't read localStorage, so the acknowledgement token rides
 along inside the push payload. That's safe: the payload is encrypted end-to-end
@@ -95,14 +97,21 @@ def build_payload(*, title: str, body: str, event_id: str, tier: int,
     `requireInteraction` on tier 1 keeps it on screen instead of auto-dismissing
     — the entire point is that it should be annoying to ignore.
     """
-    actions = []
-    if tier in (1, 2):
-        actions = [
-            {"action": "got_tickets", "title": "GOT 'EM"},
-            # Short on purpose: Android clips long action labels, and a clipped
-            # label next to a short one is how you tap the wrong thing.
-            {"action": "cant_make_it", "title": "CAN'T GO"},
-        ]
+    # ONE action button, deliberately.
+    #
+    # It used to carry GOT 'EM and CAN'T GO side by side. Tapping the left one
+    # reported cant_make_it three times running — the payload, the ids and the
+    # labels were all verified correct, so the two buttons simply do not sit
+    # where you expect on a real lock screen.
+    #
+    # But the ordering mystery is secondary. The real error was putting the
+    # DESTRUCTIVE option one careless tap from the safe one, on a lock screen,
+    # while someone is doing something else. "Can't go" silently switches off
+    # every future alert for a show you wanted — the exact miss this app exists
+    # to prevent — and it is never time-critical. Buying tickets is the only
+    # urgent action, so it gets the whole notification and no neighbour to
+    # mis-hit. Declining lives in the app, where there's room to be unambiguous.
+    actions = [{"action": "got_tickets", "title": "GOT 'EM"}] if tier in (1, 2) else []
     return {
         "title": title,
         "body": body,
