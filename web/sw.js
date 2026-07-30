@@ -18,14 +18,14 @@
  *    See CLAUDE.md — Cloudflare's 4h edge cache will otherwise serve the old one.
  */
 
-const CACHE = "kak-v12";
+const CACHE = "kak-v13";
 const SHELL = [
   "/",
   "/index.html",
-  "/css/styles.css?v=12",
-  "/js/app.js?v=12",
-  "/manifest.webmanifest?v=12",
-  "/icons/icon-192.png?v=12",
+  "/css/styles.css?v=13",
+  "/js/app.js?v=13",
+  "/manifest.webmanifest?v=13",
+  "/icons/icon-192.png?v=13",
 ];
 
 self.addEventListener("install", (e) => {
@@ -175,9 +175,12 @@ self.addEventListener("notificationclick", (e) => {
           actions: [{ action: "undo", title: "UNDO" }],
           data: d,
         });
-        if (e.action === "got_tickets" && d.ticket_url) {
-          await clients.openWindow(d.ticket_url);
-        }
+        // Deliberately does NOT open the ticket page.
+        //
+        // "GOT 'EM" means the tickets are already bought. Sending someone to buy
+        // them again is nonsense — the original version conflated "I intend to
+        // buy" with "I have bought". The ticket link belongs on the BODY tap,
+        // which is the act-on-this path.
       } catch (err) {
         await receipt("action_failed", err && (err.message || err), d);
         await clients.openWindow("/");
