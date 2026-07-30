@@ -229,8 +229,63 @@ Specials (>25min) are **never** the bit of the day. That's the shelf.
 `api/voice.py` holds every string the app says. All of it ORIGINAL and unattributed — read
 the header before adding a line.
 
+## Delivery is verified, not assumed
+
+`sent=1` only means the push service accepted the message. The service worker
+reports back — `received`, `shown`, `show_failed`, `shown_fallback` — via
+`POST /api/push/receipt`, stored in `push_receipts`. **Only `shown` counts as
+delivered**; a worker waking up says nothing about whether anything reached a
+screen.
+
+`alerts.retry_undelivered` reconciles the two on every nag tick: one retry for a
+tier 1/2 nag unconfirmed after 15 minutes, marked `channel='push-retry'` so it
+cannot loop. Nothing under 15 minutes (a phone in a tunnel is normal), nothing
+over 6 hours, nothing once the user has decided.
+
+⚠️ **A deploy can eat an in-flight push.** Observed: one vanished entirely while
+the worker was being swapped. The retry above is the mitigation; the underlying
+race is unfixed.
+
+## Backups
+
+`db.backup()` — daily thread, 7 kept in `data/backups/`. Uses sqlite3's backup
+API, **not a file copy**: in WAL mode recent commits live in the `-wal`, and a
+`cp` catching one without the other is a backup that only fails when you need it.
+
+Losing the DB costs: the VAPID keypair (**regenerating invalidates every push
+subscription — both users re-enable notifications**), both magic-link tokens,
+every bit rating and the Holds up list, ticket decisions, nag history. None of it
+recoverable from the sources.
+
+## Look and feel
+
+- **Palette is sampled from `web/icons/source-beard-hat.png`**, not chosen: field
+  `#1f282b`, brim `#d77b2e`, beard `#eeebdc`.
+- **Anton** (SIL OFL, self-hosted, 8.7KB) for the wordmark and section headings
+  **only**. Body stays system sans at 18px — condensed type is worse small, and
+  two men in their fifties read this outdoors.
+- Sticky app bar + card surfaces. Without a frame it read as a document, which
+  was the actual complaint; a hero image would have pushed the answer further
+  down and called it design.
+- **Austin sits above the bit of the day.** The app answers one question.
+- Daydream is collapsed and capped at 4 with a "N more" button. **Austin is never
+  capped** — hiding an Austin date behind a tap defeats the app.
+
+## ⚠️ Error messages that misdirect cost more than none
+
+Three bugs in one day were hidden by handlers reporting the wrong cause:
+`failed=2` for an unparseable VAPID key; `"Can't reach the server"` for a
+`ReferenceError` in our own render code while every endpoint returned 200; and a
+silent no-op `.replace()` that caused the second. **Assert that edits matched.
+Separate fetch errors from render errors. Return error text, never just counts.**
+
 ## Not built yet
 
-Bits (pool, daily pick, ratings, Rob's reactions, curator screens), the ntfy escalation
-fallback, Moontower + Ticketmaster sources, and the real voice pass on presentation.
-See **Next steps** in `SPEC.md`.
+- **Rob is not set up** — no push subscription. The last unverified thing, and everything
+  we know about push we learned on Mike's phone. `cli health` says so plainly.
+- **Moontower source** — seasonal, dormant until April.
+- **ntfy escalation fallback** — now lower priority: retry-on-unconfirmed covers the
+  transient-loss case it was meant to insure against.
+- The deploy/in-flight-push race described above.
+
+See **Status** and **Next steps** in `SPEC.md`.

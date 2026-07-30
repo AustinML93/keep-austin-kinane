@@ -472,7 +472,67 @@ down, it admits it.
 
 ---
 
+## Status — end of build day 1
+
+Everything below is live at `keepaustinkinane.austinmlapps.com`, self-hosted on the
+OMV box behind the Cloudflare tunnel. 130 tests.
+
+| Area | State |
+|---|---|
+| Sources | ✅ `kylekinane` (official feed), `capcity`, `ticketmaster`, `manual` |
+| Tiering + Austin rule | ✅ distance-based, tested |
+| Escalation ladder | ✅ both tiers, verified on a real phone |
+| Web push | ✅ proven end to end, with delivery receipts and one retry on non-delivery |
+| Shared state | ✅ scoreboard, cross-user nag copy fires correctly |
+| Manual entry | ✅ the only thing that will ever catch a Mothership booking |
+| Bits | ✅ 32 in daily rotation, 22-day window, playlist sync + paste |
+| Holds up / shelf | ✅ 6 full specials, keepers list built from the ratings |
+| Voice | ✅ one owner (`api/voice.py`), variants per level, `/api/copy` |
+| UX | ✅ app frame, palette sampled from the artwork, Anton display face, grain |
+| Backups | ✅ daily consistent snapshot, 7 kept |
+| **Rob** | ⏳ **not set up — no push subscription yet.** The last unverified thing. |
+| Moontower | ⏳ not built. Seasonal; dormant until April. |
+| ntfy fallback | ⏳ not built, and now lower priority — see below. |
+
+**Run `python3 -m api.cli health` on the box for the current picture** — sources,
+who's set up, show counts, bits pool, and the last few delivery receipts.
+
+### What today actually taught us
+
+Three separate bugs were hidden behind **error handling that reported the wrong
+cause**, and each cost real time:
+
+1. `failed=2` for a VAPID private key the library could not parse. Every push had
+   been failing before leaving the box; we spent an hour suspecting the phone.
+2. `"Can't reach the server"` for a `ReferenceError` in our own rendering code,
+   while all six endpoints returned 200.
+3. A silent no-op `.replace()` during an edit, which caused #2.
+
+For an app whose entire promise is *silence means nothing is happening*, a
+delivery layer that fails quietly is the worst possible shape. The delivery
+receipts exist because of this, and they are probably the most valuable thing
+built today.
+
+The same pattern showed up in the design, twice: a **destructive lock-screen
+button next to the safe one**, and a **no-repeat window that silently stopped
+applying** when the pool was smaller than the window. Both degraded quietly
+rather than failing loudly.
+
+**ntfy is now lower priority than when it was specced.** Retry-on-unconfirmed
+covers the transient-loss case it was meant to insure against, and it needs a
+topic decision.
+
 ## Next steps
+
+**Immediate, and the only one that matters:**
+
+0. **Get Rob set up.** His magic link is in the DB (`cli health` doesn't print
+   tokens; `cli adduser rob Rob` reissues one, or read it from the `users` table).
+   He must open it in **Chrome directly**, not from a messaging app's webview.
+   Then install, then enable notifications, then fire a test alert **at his phone
+   specifically** — everything we've proven about push, we proved on Mike's.
+
+**Then, in rough order of value:**
 
 1. ~~Verify the sources.~~ ✅ **Done — `recon/probe_sources.py`, results in
    `recon/FINDINGS.md`.** The design survives; the source list changed.
