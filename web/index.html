@@ -4,82 +4,109 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Keep Austin Kinane</title>
-<link rel="manifest" href="/manifest.webmanifest?v=15">
-<meta name="theme-color" content="#141210">
-<link rel="stylesheet" href="/css/styles.css?v=15">
+<link rel="manifest" href="/manifest.webmanifest?v=16">
+<meta name="theme-color" content="#161f21">
+<link rel="preload" href="/fonts/anton-latin.woff2?v=16" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/css/styles.css?v=16">
 </head>
 <body>
 
 <!--
-  Shows + shared state + push are wired. Still to come: the bit of the day, the
-  curator screens, and the real voice pass on presentation.
+  ORDER MATTERS MORE THAN DECORATION HERE.
+
+  This app answers one question — is Kinane coming to Austin — so the Austin
+  section sits directly under the header, above everything else including the bit
+  of the day. A hero image would have pushed that answer further down the screen
+  and called it design.
+
+  What was actually missing was an app FRAME: a persistent header and real
+  surfaces around the sections. Without those it read like a document you scroll,
+  which is exactly the complaint.
 -->
 
-<header>
-  <h1>Keep Austin Kinane</h1>
-  <p id="status" class="status">checking…</p>
-
-  <!-- Install. Chrome fires beforeinstallprompt when it decides the app is
-       installable; we stash it and offer one button instead of making anyone
-       hunt through the ⋮ menu. The hint below is the fallback for when Chrome
-       withholds the event. -->
-  <div id="install-box" class="hidden">
-    <button id="install-btn" class="cta">Install Uncle BBQ</button>
-    <p class="hint" id="install-why">Puts it on your home screen.</p>
+<header class="appbar">
+  <img class="mark" src="/icons/icon-192.png?v=16" alt="" width="46" height="46">
+  <div class="appbar-text">
+    <h1>Keep Austin<span>Kinane</span></h1>
+    <p id="status" class="status">checking…</p>
   </div>
-  <p id="install-hint" class="hint hidden"></p>
-
-  <button id="push-btn" class="push">Turn on notifications</button>
 </header>
 
 <main>
-  <!-- Bit of the day. Thumbnail first, tap to play — autoplay with sound is
-       blocked everywhere, and nobody wants a phone that starts talking. -->
-  <section id="bit" class="bit hidden">
+  <!-- THE ANSWER, FIRST. -->
+  <section id="tier1" class="card tier hidden">
+    <h2 id="h-tier1">Austin</h2>
+    <div class="rows"></div>
+  </section>
+
+  <p id="empty" class="empty hidden"></p>
+
+  <!-- Setup. Hides itself entirely once there's nothing left to do, so the
+       everyday case isn't cluttered with buttons already pressed. -->
+  <div id="setup" class="setup hidden">
+    <div id="install-box" class="hidden">
+      <button id="install-btn" class="cta">Install</button>
+      <p class="hint" id="install-why"></p>
+    </div>
+    <p id="install-hint" class="hint hidden"></p>
+    <button id="push-btn" class="push">Turn on notifications</button>
+  </div>
+
+  <!-- Thumbnail first, tap to play. Autoplay with sound is blocked everywhere,
+       and nobody wants a phone that starts talking when they open it. -->
+  <section id="bit" class="card bit hidden">
     <h2 id="h-bit">Bit of the day</h2>
     <div id="bit-body"></div>
   </section>
 
-  <section id="tier1" class="tier hidden"><h2 id="h-tier1">Austin</h2><div class="rows"></div></section>
-  <section id="tier2" class="tier hidden"><h2 id="h-tier2">Road trip</h2><div class="rows"></div></section>
-  <section id="tier3" class="tier hidden"><h2 id="h-tier3">Daydream</h2><div class="rows"></div></section>
-  <p id="empty" class="empty hidden">Nothing on the calendar.</p>
+  <section id="tier2" class="card tier hidden">
+    <h2 id="h-tier2">Road trip</h2>
+    <div class="rows"></div>
+  </section>
+
+  <!-- Daydream is collapsed. Everything in it is a thousand miles away and none
+       of it will ever matter — it's here for the cheap-flight fantasy, not to be
+       scrolled past every single day. -->
+  <details id="tier3-box" class="card">
+    <summary id="h-tier3">Daydream</summary>
+    <p class="note-quiet" id="tier3-note"></p>
+    <section id="tier3"><div class="rows"></div></section>
+  </details>
+
+  <section id="holds-up" class="card hidden">
+    <h2 id="h-holds-up">Holds up</h2>
+    <p class="note-quiet" id="holds-up-note"></p>
+    <div id="holds-up-body"></div>
+  </section>
+
+  <section id="shelf" class="card hidden">
+    <h2 id="h-shelf">The shelf</h2>
+    <p class="note-quiet" id="shelf-note"></p>
+    <div id="shelf-body"></div>
+  </section>
 
   <!--
     Manual add. Not a fallback — a first-class source. Discovery was always
     social, and this is the only thing that will ever catch a Comedy Mothership
     booking (their site blocks us, no aggregator carries them) or a drop-in.
   -->
-  <details id="add-box">
+  <details id="add-box" class="card">
     <summary id="add-summary">Somebody told you about a show</summary>
     <form id="add-form">
-      <input name="venue" list="venue-list" placeholder="Venue (e.g. Comedy Mothership)" required>
+      <input name="venue" list="venue-list" placeholder="Venue" required>
       <datalist id="venue-list"></datalist>
       <input name="city" placeholder="City" value="Austin, TX">
       <span class="row">
         <input name="date" type="date" required>
         <input name="time" type="time">
       </span>
-      <input name="ticket_url" type="url" placeholder="Ticket link (optional)">
-      <input name="note" placeholder="Who told you? (optional)">
+      <input name="ticket_url" type="url" placeholder="Ticket link">
+      <input name="note" placeholder="Who told you?">
       <button type="submit" id="add-submit">Add it</button>
       <p id="add-result"></p>
     </form>
   </details>
 </main>
-
-<!-- The keepers. Appears only once something has earned it. -->
-<section id="holds-up" class="hidden">
-  <h2 id="h-holds-up">Holds up</h2>
-  <p class="shelf-note" id="holds-up-note"></p>
-  <div id="holds-up-body"></div>
-</section>
-
-<section id="shelf" class="hidden">
-  <h2 id="h-shelf">The shelf</h2>
-  <p class="shelf-note" id="shelf-note">Full sets.</p>
-  <div id="shelf-body"></div>
-</section>
 
 <footer>
   <details>
@@ -88,6 +115,6 @@
   </details>
 </footer>
 
-<script src="/js/app.js?v=15"></script>
+<script src="/js/app.js?v=16"></script>
 </body>
 </html>

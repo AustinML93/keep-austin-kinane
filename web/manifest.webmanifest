@@ -3,23 +3,23 @@
   "short_name": "Uncle BBQ",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#141210",
-  "theme_color": "#141210",
+  "background_color": "#161f21",
+  "theme_color": "#161f21",
   "icons": [
     {
-      "src": "/icons/icon-192.png?v=15",
+      "src": "/icons/icon-192.png?v=16",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-512.png?v=15",
+      "src": "/icons/icon-512.png?v=16",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/maskable-512.png?v=15",
+      "src": "/icons/maskable-512.png?v=16",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

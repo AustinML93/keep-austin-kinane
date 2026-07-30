@@ -48,6 +48,7 @@ function applyStaticCopy() {
   set("#h-tier1", "tier1_heading");
   set("#h-tier2", "tier2_heading");
   set("#h-tier3", "tier3_heading");
+  set("#tier3-note", "tier3_note");
   set("#h-bit", "bit_heading");
   set("#h-holds-up", "holds_up_heading");
   set("#holds-up-note", "holds_up_note");
@@ -104,12 +105,14 @@ window.addEventListener("beforeinstallprompt", (e) => {
   deferredInstall = e;
   $("#install-hint").classList.add("hidden");
   $("#install-box").classList.remove("hidden");
+  refreshSetupVisibility();
 });
 
 window.addEventListener("appinstalled", () => {
   deferredInstall = null;
   $("#install-box").classList.add("hidden");
   $("#install-hint").classList.add("hidden");
+  refreshSetupVisibility();
 });
 
 $("#install-btn")?.addEventListener("click", async () => {
@@ -118,12 +121,14 @@ $("#install-btn")?.addEventListener("click", async () => {
   await deferredInstall.userChoice;
   deferredInstall = null;
   $("#install-box").classList.add("hidden");
+  refreshSetupVisibility();
 });
 
 // If Chrome hasn't offered the event a few seconds in, show the manual route
 // rather than leaving a returning visitor with nothing.
 setTimeout(() => {
   if (!installed() && !deferredInstall) $("#install-hint").classList.remove("hidden");
+  refreshSetupVisibility();
 }, 4000);
 
 /* ── Push ────────────────────────────────────────────────────────────────── */
@@ -148,6 +153,22 @@ const b64ToUint8 = (b64) => {
  * dropped as stale. Without this, one of them could quietly stop receiving
  * alerts while the app looked fine.
  */
+/*
+ * The setup strip only exists while there IS setup. Once the app is installed
+ * and subscribed it disappears entirely, so the everyday view isn't led by two
+ * buttons you already pressed. The answer to "is Kinane coming" should be the
+ * first thing on the screen, not the third.
+ */
+function refreshSetupVisibility() {
+  const box = $("#setup");
+  if (!box) return;
+  const somethingToDo =
+    !$("#install-box").classList.contains("hidden") ||
+    !$("#install-hint").classList.contains("hidden") ||
+    !$("#push-btn").disabled;
+  box.classList.toggle("hidden", !somethingToDo);
+}
+
 async function refreshPushState() {
   const btn = $("#push-btn");
   if (!btn) return;
@@ -180,6 +201,7 @@ async function refreshPushState() {
     btn.textContent = COPY.push_off;
     btn.disabled = false;
   }
+  refreshSetupVisibility();
 }
 
 async function enablePush() {
@@ -273,9 +295,12 @@ function renderShows(data) {
 
   for (const tier of [1, 2, 3]) {
     const rows = shows.filter((s) => s.tier === tier);
+    // Daydream is wrapped in a <details>, so hide the wrapper rather than the
+    // section — otherwise an empty summary sits there inviting a pointless tap.
+    const box = tier === 3 ? $("#tier3-box") : $(`#tier${tier}`);
     const sec = $(`#tier${tier}`);
-    if (!rows.length) { sec.classList.add("hidden"); continue; }
-    sec.classList.remove("hidden");
+    if (!rows.length) { box.classList.add("hidden"); continue; }
+    box.classList.remove("hidden");
     sec.querySelector(".rows").innerHTML = rows.map((s) => showRow(s, data.me)).join("");
   }
 
