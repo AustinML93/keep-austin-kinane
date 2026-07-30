@@ -227,6 +227,9 @@ UI = {
 
     "bit_heading": "Bit of the day",
     "bit_empty": "Nothing in the pool yet. Put something in the playlist and I'll find it.",
+    "holds_up_heading": "Holds up",
+    "holds_up_note": "The ones that survived a second look. Longest first, in case "
+                     "you've got the evening.",
     "shelf_heading": "The shelf",
     "shelf_note": "Full sets. For when there's an hour and nowhere to be.",
 

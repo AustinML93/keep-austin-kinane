@@ -287,6 +287,32 @@ def record_served(con, bit_id: str, on: date | None = None) -> None:
     con.commit()
 
 
+def holds_up(con) -> list[dict]:
+    """
+    Everything rated 🔧 Shocks & Struts — the keepers.
+
+    This isn't a new curation surface, it's the one that already existed finally
+    having somewhere to appear. Until now the rating only nudged an invisible
+    rotation weight, which is a poor reason to press a button. Now pressing it
+    also builds a permanent shelf, so rating the daily bit pays off visibly.
+
+    Deliberately UNBOUNDED. A hard top-ten would make every future addition force
+    an eviction decision — a chore disguised as a feature, the same trap the
+    candidate queue was.
+
+    Longest first: this is the "I've got time, give me a good one" list, so the
+    commitments belong at the top and the quick hits at the bottom. Specials are
+    excluded — they have the shelf.
+    """
+    return [dict(r) for r in con.execute(
+        """SELECT b.* FROM bits b
+           JOIN bit_ratings r ON r.bit_id = b.id
+           JOIN users u ON u.id = r.user_id AND u.is_curator = 1
+           WHERE r.rating = 'struts' AND b.state = 'active' AND b.available = 1
+             AND b.kind != 'special'
+           ORDER BY b.duration_s DESC""")]
+
+
 def specials(con) -> list[dict]:
     return [dict(r) for r in con.execute(
         """SELECT * FROM bits WHERE kind='special' AND state='active' AND available=1

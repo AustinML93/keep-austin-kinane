@@ -167,6 +167,45 @@ class TestPool(unittest.TestCase):
             counts[got["id"]] += 1
         self.assertGreater(counts["vid00000000"], counts["vid00000001"])
 
+    # ── holds up ─────────────────────────────────────────────────────────────
+
+    def test_holds_up_lists_only_what_the_curator_rated_struts(self):
+        self.seed(4)
+        self.bits.rate(self.con, "vid00000000", "mike", "struts", is_curator=True)
+        self.bits.rate(self.con, "vid00000001", "mike", "fine", is_curator=True)
+        self.bits.rate(self.con, "vid00000002", "mike", "gout", is_curator=True)
+        ids = [b["id"] for b in self.bits.holds_up(self.con)]
+        self.assertEqual(ids, ["vid00000000"])
+
+    def test_robs_praise_does_not_add_to_holds_up(self):
+        """His rating is signal, not control — here as everywhere else."""
+        self.seed(2)
+        self.bits.rate(self.con, "vid00000000", "rob", "struts", is_curator=False)
+        self.assertEqual(self.bits.holds_up(self.con), [])
+
+    def test_holds_up_is_longest_first(self):
+        """It's the 'I've got the evening' list, so commitments go on top."""
+        for vid, dur in (("shortone01", 60), ("longone001", 1200), ("midone0001", 400)):
+            self.bits.upsert_bit(self.con, self.item(vid, "clip", duration_s=dur),
+                                 added_by="mike", source="manual")
+            self.bits.rate(self.con, vid, "mike", "struts", is_curator=True)
+        self.assertEqual([b["id"] for b in self.bits.holds_up(self.con)],
+                         ["longone001", "midone0001", "shortone01"])
+
+    def test_specials_stay_out_of_holds_up(self):
+        """They have the shelf; listing them twice is just noise."""
+        self.bits.upsert_bit(self.con, self.item("spec000001", "special", duration_s=4200),
+                             added_by="mike", source="manual")
+        self.bits.rate(self.con, "spec000001", "mike", "struts", is_curator=True)
+        self.assertEqual(self.bits.holds_up(self.con), [])
+
+    def test_blocking_something_removes_it_from_holds_up(self):
+        self.seed(1)
+        self.bits.rate(self.con, "vid00000000", "mike", "struts", is_curator=True)
+        self.assertEqual(len(self.bits.holds_up(self.con)), 1)
+        self.bits.rate(self.con, "vid00000000", "mike", "gout", is_curator=True)
+        self.assertEqual(self.bits.holds_up(self.con), [])
+
     # ── the asymmetry ────────────────────────────────────────────────────────
 
     def test_robs_rating_is_signal_not_control(self):

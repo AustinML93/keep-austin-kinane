@@ -296,6 +296,22 @@ def bit_specials(authorization: str | None = Header(None)):
         con.close()
 
 
+@app.get("/api/bits/holds-up")
+def bits_hold_up(authorization: str | None = Header(None)):
+    """The keepers. See bits.holds_up for why this isn't a separate Top 10."""
+    con = db.connect()
+    try:
+        me = None
+        if authorization:
+            try:
+                me = _user_from(con, authorization)["id"]
+            except HTTPException:
+                me = None
+        return {"holds_up": [_bit_view(con, b, me) for b in bits_mod.holds_up(con)]}
+    finally:
+        con.close()
+
+
 @app.post("/api/bits/{bit_id}/rate")
 def rate_bit(bit_id: str, payload: dict = Body(...),
              authorization: str | None = Header(None)):

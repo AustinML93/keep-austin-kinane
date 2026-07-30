@@ -49,6 +49,8 @@ function applyStaticCopy() {
   set("#h-tier2", "tier2_heading");
   set("#h-tier3", "tier3_heading");
   set("#h-bit", "bit_heading");
+  set("#h-holds-up", "holds_up_heading");
+  set("#holds-up-note", "holds_up_note");
   set("#h-shelf", "shelf_heading");
   set("#shelf-note", "shelf_note");
   set("#empty", "empty_shows");
@@ -369,7 +371,28 @@ function renderBit(b, me, autoplay = false) {
       b.my_rating = btn.dataset.r;
       b.ratings = { ...(b.ratings || {}), [me]: btn.dataset.r };
       renderBit(b, me, autoplay);
+      // Marking something Shocks & Struts should make it appear in Holds up
+      // right away — that visible payoff is the reason to press the button.
+      fetch("/api/bits/holds-up", { headers: { Authorization: `Bearer ${token()}` } })
+        .then((r) => r.json()).then((d) => renderHoldsUp(d.holds_up)).catch(() => {});
     }));
+}
+
+const bitRow = (b) => `
+    <a class="special" href="${b.url}" target="_blank" rel="noopener">
+      ${b.thumbnail ? `<img src="${b.thumbnail}" alt="">` : ""}
+      <span><span class="t">${b.display_title || ""}</span><br>
+      <span class="c">${b.channel || ""}${
+        b.duration_s ? ` · ${Math.floor(b.duration_s / 60)}min` : ""}</span></span>
+    </a>`;
+
+// Only ever shown once something has earned a place in it — an empty "Holds up"
+// would just be a reproach.
+function renderHoldsUp(list) {
+  const sec = $("#holds-up");
+  if (!list || !list.length) { sec.classList.add("hidden"); return; }
+  sec.classList.remove("hidden");
+  $("#holds-up-body").innerHTML = list.map(bitRow).join("");
 }
 
 function renderShelf(list) {
@@ -392,6 +415,8 @@ function loadBits() {
     }).catch(() => {});
   fetch("/api/bits/specials", { headers }).then((r) => r.json())
     .then((d) => renderShelf(d.specials)).catch(() => {});
+  fetch("/api/bits/holds-up", { headers }).then((r) => r.json())
+    .then((d) => renderHoldsUp(d.holds_up)).catch(() => {});
 }
 
 /* ── Manual add ──────────────────────────────────────────────────────────── */
