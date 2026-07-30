@@ -126,7 +126,8 @@ def sync_playlist(con, playlist_id: str, *, added_by: str = "mike") -> dict:
     return {"fetched": len(items), "added": added, "dropped": dropped, "via": how}
 
 
-def add_url(con, url: str, *, added_by: str) -> tuple[dict | None, bool]:
+def add_url(con, url: str, *, added_by: str,
+            kind: str | None = None) -> tuple[dict | None, bool]:
     """
     The flexible path: paste anything.
 
@@ -149,7 +150,10 @@ def add_url(con, url: str, *, added_by: str) -> tuple[dict | None, bool]:
             item = {**item, **full}
 
     item.setdefault("duration_s", 0)
-    item.setdefault("kind", classify(item.get("duration_s") or 0))
+    # An explicit kind WINS over the duration heuristic. Mike grouped these by
+    # hand; if he calls a 30-minute set a bit, it's a bit. The classifier exists
+    # for things nobody has looked at, not to overrule someone who has.
+    item["kind"] = kind or item.get("kind") or classify(item.get("duration_s") or 0)
     is_new = upsert_bit(con, item, added_by=added_by, source="manual")
     return item, is_new
 

@@ -324,7 +324,10 @@ def add_bit(payload: dict = Body(...), authorization: str | None = Header(None))
         url = (payload.get("url") or "").strip()
         if not url:
             raise HTTPException(400, "url required")
-        item, is_new = bits_mod.add_url(con, url, added_by=user["id"])
+        kind = payload.get("kind")
+        if kind and kind not in ("short", "clip", "special"):
+            raise HTTPException(400, "kind must be short, clip or special")
+        item, is_new = bits_mod.add_url(con, url, added_by=user["id"], kind=kind)
         if not item:
             raise HTTPException(
                 400, "couldn't read that one — it may be private, deleted, or have "
