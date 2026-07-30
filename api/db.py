@@ -525,9 +525,75 @@ def record_receipt(con, user_id: str | None, event_id: str | None,
     con.commit()
 
 
+def was_delivered(con, user_id: str, event_id: str, since: str) -> bool:
+    """
+    Did a device confirm SHOWING a notification for this show since `since`?
+
+    'shown' is the only stage that counts. 'received' means the worker woke up
+    but says nothing about whether anything appeared on a screen.
+    """
+    row = con.execute(
+        """SELECT 1 FROM push_receipts
+           WHERE user_id = ? AND event_id = ? AND at >= ?
+             AND stage IN ('shown', 'shown_fallback') LIMIT 1""",
+        (user_id, event_id, since)).fetchone()
+    return row is not None
+
+
+def nag_attempts(con, user_id: str, event_id: str, level: int) -> list[dict]:
+    return [dict(r) for r in con.execute(
+        "SELECT * FROM nags WHERE user_id=? AND event_id=? AND level=? ORDER BY id",
+        (user_id, event_id, level))]
+
+
 def recent_receipts(con, limit: int = 20) -> list[dict]:
     return [dict(r) for r in con.execute(
         "SELECT * FROM push_receipts ORDER BY id DESC LIMIT ?", (limit,))]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Backup
+# ──────────────────────────────────────────────────────────────────────────────
+
+BACKUP_KEEP = 7
+
+
+def backup(con, keep: int = BACKUP_KEEP) -> Path:
+    """
+    Take a consistent snapshot of the database.
+
+    Worth doing because losing this file costs more than it looks:
+
+      · the VAPID keypair — regenerating it invalidates every push subscription,
+        so both users would have to re-enable notifications
+      · both magic-link tokens — new links to distribute
+      · every bit rating, and the Holds up list built from them
+      · the ticket decisions and the whole nag history
+
+    None of that is recoverable from the sources.
+
+    Uses sqlite3's own backup API rather than copying the file. In WAL mode a
+    plain `cp` can capture a torn database — recent commits live in the -wal
+    file, and a copy that catches one without the other is a backup that only
+    fails when you need it.
+    """
+    dest_dir = DB_PATH.parent / "backups"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    dest = dest_dir / f"kak-{stamp}.sqlite3"
+
+    target = sqlite3.connect(dest)
+    try:
+        con.backup(target)
+    finally:
+        target.close()
+
+    # Keep the newest `keep`; a backup directory that grows forever eventually
+    # becomes the thing that fills the disk.
+    snapshots = sorted(dest_dir.glob("kak-*.sqlite3"))
+    for old in snapshots[:-keep] if keep else []:
+        old.unlink()
+    return dest
 
 
 def get_setting(con, key: str) -> str | None:

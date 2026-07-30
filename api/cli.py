@@ -18,6 +18,7 @@ Command line for the show tracker — the thing you run to see if it works.
     python3 -m api.cli bits list                       what's in the pool
     python3 -m api.cli bits today                      today's pick
     python3 -m api.cli receipts                        what devices reported back
+    python3 -m api.cli backup                          consistent DB snapshot
 """
 
 from __future__ import annotations
@@ -255,6 +256,19 @@ def cmd_bits() -> int:
     return 0
 
 
+def cmd_backup() -> int:
+    con = db.connect()
+    dest = db.backup(con)
+    con.close()
+    size = dest.stat().st_size
+    print(f"  wrote {dest}  ({size:,} bytes)")
+    kept = sorted(dest.parent.glob("kak-*.sqlite3"))
+    print(f"  {len(kept)} snapshot(s) kept:")
+    for k in kept:
+        print(f"    {k.name}  {k.stat().st_size:,}b")
+    return 0
+
+
 def cmd_receipts() -> int:
     """What the devices actually reported back about recent pushes."""
     con = db.connect()
@@ -284,7 +298,8 @@ def main() -> int:
     cmds = {"poll": cmd_poll, "shows": cmd_shows, "health": cmd_health,
             "adduser": cmd_adduser, "nags": cmd_nags, "vapid": cmd_vapid,
             "simulate": cmd_simulate, "unsimulate": cmd_unsimulate,
-            "add": cmd_add, "bits": cmd_bits, "receipts": cmd_receipts}
+            "add": cmd_add, "bits": cmd_bits, "receipts": cmd_receipts,
+            "backup": cmd_backup}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(__doc__)
         return 1

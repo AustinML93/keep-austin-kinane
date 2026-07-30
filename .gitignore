@@ -5,6 +5,7 @@ __pycache__/
 # The SQLite DB is the only stateful thing — never commit it.
 # data/bits.seed.json IS committed; it's the curated pool.
 data/*.sqlite3
+data/backups/
 data/*.sqlite3-wal
 data/*.sqlite3-shm
 

@@ -28,10 +28,12 @@ from .poll import poll_once
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "3600"))   # hourly; polite
 NAG_INTERVAL = int(os.environ.get("NAG_INTERVAL", "900"))      # 15min; the ladder is time-based
 BITS_INTERVAL = int(os.environ.get("BITS_INTERVAL", "21600"))  # 6h; nobody's in a hurry for a laugh
+BACKUP_INTERVAL = int(os.environ.get("BACKUP_INTERVAL", "86400"))  # daily
 
 app = FastAPI(title="Keep Austin Kinane", docs_url=None, redoc_url=None)
 _last_poll: dict = {"at": None, "new": 0, "error": None}
 _last_nag: dict = {"at": None, "sent": 0, "error": None}
+_last_backup: dict = {"at": None, "path": None, "error": None}
 
 # 'unseen' is accepted so the notification's UNDO can put someone back on the
 # hook after a mis-tap. It is NOT in db.DECIDED, so the ladder resumes.
@@ -51,6 +53,19 @@ def _loop(fn, interval, state):
 def _do_poll():
     report = poll_once()
     _last_poll.update(at=db.now(), new=len(report.new_events), error=None)
+
+
+def _do_backup():
+    """
+    Daily snapshot. Losing this file means re-onboarding both users and losing
+    every rating — see db.backup for why it's not just a convenience.
+    """
+    con = db.connect()
+    try:
+        dest = db.backup(con)
+        _last_backup.update(at=db.now(), path=dest.name, error=None)
+    finally:
+        con.close()
 
 
 def _do_bits_sync():
@@ -84,6 +99,8 @@ def start_workers() -> None:
                      daemon=True, name="poller").start()
     threading.Thread(target=_loop, args=(_do_nag, NAG_INTERVAL, _last_nag),
                      daemon=True, name="nagger").start()
+    threading.Thread(target=_loop, args=(_do_backup, BACKUP_INTERVAL, _last_backup),
+                     daemon=True, name="backup").start()
     if BIT_PLAYLIST:
         threading.Thread(target=_loop, args=(_do_bits_sync, BITS_INTERVAL, {}),
                          daemon=True, name="bits").start()
@@ -443,6 +460,7 @@ def health():
         "subscriptions": subs,
         "last_poll": _last_poll,
         "last_nag": _last_nag,
+        "last_backup": _last_backup,
         "recent_push_receipts": db_receipts(),
     }
 
