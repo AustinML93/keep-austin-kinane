@@ -18,14 +18,14 @@
  *    See CLAUDE.md — Cloudflare's 4h edge cache will otherwise serve the old one.
  */
 
-const CACHE = "kak-v13";
+const CACHE = "kak-v14";
 const SHELL = [
   "/",
   "/index.html",
-  "/css/styles.css?v=13",
-  "/js/app.js?v=13",
-  "/manifest.webmanifest?v=13",
-  "/icons/icon-192.png?v=13",
+  "/css/styles.css?v=14",
+  "/js/app.js?v=14",
+  "/manifest.webmanifest?v=14",
+  "/icons/icon-192.png?v=14",
 ];
 
 self.addEventListener("install", (e) => {
@@ -156,6 +156,7 @@ self.addEventListener("notificationclick", (e) => {
    */
   if (e.action === "got_tickets" || e.action === "cant_make_it") {
     e.waitUntil((async () => {
+      const ack = { ...ACK_FALLBACK, ...(d.ack || {}) };
       try {
         // Report EXACTLY what Chrome handed us, before acting on it. Tapping the
         // button labelled GOT 'EM twice produced cant_make_it, and guessing at
@@ -168,11 +169,11 @@ self.addEventListener("notificationclick", (e) => {
         );
         await setState(d, e.action);
         await self.registration.showNotification("Uncle BBQ", {
-          body: ACK[e.action],
+          body: ack[e.action],
           tag: `ack-${d.event_id}`,
           icon: "/icons/icon-192.png",
           badge: "/icons/badge.png",
-          actions: [{ action: "undo", title: "UNDO" }],
+          actions: [{ action: "undo", title: ack.undo_label }],
           data: d,
         });
         // Deliberately does NOT open the ticket page.
@@ -195,7 +196,7 @@ self.addEventListener("notificationclick", (e) => {
     e.waitUntil((async () => {
       await setState(d, "unseen").catch(() => {});
       await self.registration.showNotification("Uncle BBQ", {
-        body: "Undone. You're still on the hook.",
+        body: (d.ack && d.ack.undone) || ACK_FALLBACK.undone,
         tag: `ack-${d.event_id}`,
         icon: "/icons/icon-192.png",
         badge: "/icons/badge.png",

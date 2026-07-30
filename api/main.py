@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import threading
 import time
+from datetime import datetime
 
 from fastapi import Body, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -149,6 +150,18 @@ def set_state(event_id: str, payload: dict = Body(...),
         return {"ok": True, "user": user["id"], "event": event_id, "state": state}
     finally:
         con.close()
+
+
+@app.get("/api/copy")
+def ui_copy():
+    """
+    Every string the interface shows.
+
+    Copy used to be duplicated between voice.py and hardcoded English in
+    app.js — which guarantees the two drift apart. The server owns it; the front
+    end keeps only terse fallbacks for when it can't reach us.
+    """
+    return {"copy": voice.ui_copy()}
 
 
 @app.get("/api/venues")
@@ -406,7 +419,8 @@ def health():
         "all_eyes_open": not blind,
         "blind": [s["id"] for s in blind],
         "status_line": voice.status_line(
-            len(watchers), [s["name"] for s in blind], config_lost),
+            len(watchers), [s["name"] for s in blind], config_lost,
+            seed=datetime.now().date().isoformat()),
         "subscriptions": subs,
         "last_poll": _last_poll,
         "last_nag": _last_nag,

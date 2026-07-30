@@ -9,6 +9,65 @@
 const $ = (s) => document.querySelector(s);
 const TOKEN_KEY = "kak_token";
 
+/*
+ * All copy lives in api/voice.py and arrives via /api/copy. It used to be
+ * duplicated here in English, which guarantees the two versions drift apart the
+ * first time anyone edits one of them.
+ *
+ * These fallbacks are deliberately plain — they only show when the server can't
+ * be reached, and a flat sentence is better than a missing one.
+ */
+let COPY = {
+  empty_shows: "Nothing on the calendar.",
+  bit_empty: "Nothing in the pool yet.",
+  push_on: "Notifications on",
+  push_off: "Turn on notifications",
+  push_blocked: "Notifications are blocked",
+  push_unsupported: "This browser can't do notifications.",
+  push_declined: "Notifications are off.",
+  install_cta: "Install",
+  install_manual: "⋮ → Add to Home screen → Install.",
+  add_failed: "Couldn't add that one.",
+  add_needs_link: "Open your magic link first.",
+  offline: "Can't reach the server.",
+  state_unseen: "—", state_seen: "seen it", state_got_tickets: "GOT 'EM",
+  state_cant_make_it: "can't go", state_passing: "passing",
+  act_got: "GOT 'EM", act_cant: "Can't go",
+  rate_struts: "🔧 Shocks & Struts", rate_fine: "〰️ Runs Fine",
+  rate_gout: "💥 Gout Flare-Up",
+};
+
+const loadCopy = () =>
+  fetch("/api/copy")
+    .then((r) => r.json())
+    .then((d) => { COPY = { ...COPY, ...d.copy }; applyStaticCopy(); })
+    .catch(() => {});
+
+function applyStaticCopy() {
+  const set = (sel, key) => { const el = $(sel); if (el && COPY[key]) el.textContent = COPY[key]; };
+  set("#h-tier1", "tier1_heading");
+  set("#h-tier2", "tier2_heading");
+  set("#h-tier3", "tier3_heading");
+  set("#h-bit", "bit_heading");
+  set("#h-shelf", "shelf_heading");
+  set("#shelf-note", "shelf_note");
+  set("#empty", "empty_shows");
+  set("#install-btn", "install_cta");
+  set("#install-why", "install_why");
+  set("#install-hint", "install_manual");
+  set("#add-summary", "add_summary");
+  set("#add-submit", "add_submit");
+  set("#watching-summary", "watching_summary");
+  const ph = (name, key) => {
+    const el = document.querySelector(`#add-form [name=${name}]`);
+    if (el && COPY[key]) el.placeholder = COPY[key];
+  };
+  ph("venue", "add_venue_placeholder");
+  ph("city", "add_city_placeholder");
+  ph("ticket_url", "add_url_placeholder");
+  ph("note", "add_note_placeholder");
+}
+
 /* ── Auth: a magic link, once. No passwords, appropriate to the stakes. ───── */
 (function captureToken() {
   const t = new URLSearchParams(location.search).get("t");
@@ -96,9 +155,9 @@ async function refreshPushState() {
     return;
   }
   if (Notification.permission === "denied") {
-    btn.textContent = "Notifications are blocked";
+    btn.textContent = COPY.push_blocked;
     btn.disabled = true;
-    btn.title = "Chrome ⋮ → Settings → Site settings → Notifications";
+    btn.title = COPY.push_blocked_help || "";
     return;
   }
 
@@ -106,7 +165,7 @@ async function refreshPushState() {
   const sub = await reg.pushManager.getSubscription();
 
   if (sub) {
-    btn.textContent = "Notifications on";
+    btn.textContent = COPY.push_on;
     btn.disabled = true;
     if (authed()) {
       fetch("/api/push/subscribe", {
@@ -116,19 +175,19 @@ async function refreshPushState() {
       }).catch(() => {});
     }
   } else {
-    btn.textContent = "Turn on notifications";
+    btn.textContent = COPY.push_off;
     btn.disabled = false;
   }
 }
 
 async function enablePush() {
-  if (!authed()) return alert("Open your magic link first.");
+  if (!authed()) return alert(COPY.add_needs_link);
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-    return alert("This browser can't do push. Android Chrome can.");
+    return alert(COPY.push_unsupported);
   }
   const perm = await Notification.requestPermission();
   if (perm !== "granted") {
-    return alert("Without notifications this is just a website that knows things.");
+    return alert(COPY.push_declined);
   }
 
   const reg = await navigator.serviceWorker.ready;
@@ -182,14 +241,14 @@ function showRow(s, me) {
   // The scoreboard IS the feature. Two guys, one line, no coordination workflow.
   const scoreboard = Object.entries(s.states || {})
     .map(([id, v]) => `<span class="who ${v.state}">${id === me ? "You" : v.name}: ${
-      STATE_LABEL[v.state] || v.state}</span>`)
+      stateLabel(v.state)}</span>`)
     .join("");
 
   // Only tiers 1 and 2 get decision buttons — a daydream needs no answer.
   const buttons = s.tier < 3 && me
     ? `<span class="acts">
-         <button data-ev="${s.id}" data-st="got_tickets">GOT 'EM</button>
-         <button data-ev="${s.id}" data-st="cant_make_it">CAN'T MAKE IT</button>
+         <button data-ev="${s.id}" data-st="got_tickets">${COPY.act_got}</button>
+         <button data-ev="${s.id}" data-st="cant_make_it">${COPY.act_cant}</button>
        </span>`
     : "";
 
@@ -245,17 +304,17 @@ function load() {
       renderHealth(health);
     })
     .catch(() => {
-      $("#status").textContent = "Can't reach the server. Which is its own kind of answer.";
+      $("#status").textContent = COPY.offline;
       $("#status").classList.add("bad");
     });
 }
 
 /* ── Bits ────────────────────────────────────────────────────────────────── */
 
-const RATINGS = [
-  { r: "struts", label: "🔧 Shocks & Struts" },
-  { r: "fine",   label: "〰️ Runs Fine" },
-  { r: "gout",   label: "💥 Gout Flare-Up" },
+const ratings = () => [
+  { r: "struts", label: COPY.rate_struts },
+  { r: "fine", label: COPY.rate_fine },
+  { r: "gout", label: COPY.rate_gout },
 ];
 
 function bitFrame(b, autoplay) {
@@ -276,19 +335,23 @@ function bitFrame(b, autoplay) {
 }
 
 function renderBit(b, me, autoplay = false) {
-  if (!b) { $("#bit").classList.add("hidden"); return; }
+  if (!b) {
+    $("#bit").classList.remove("hidden");
+    $("#bit-body").innerHTML = `<p class="bit-meta">${COPY.bit_empty}</p>`;
+    return;
+  }
   $("#bit").classList.remove("hidden");
 
   const others = Object.entries(b.ratings || {})
     .filter(([who]) => who !== me)
-    .map(([who, r]) => `${who} said ${RATINGS.find((x) => x.r === r)?.label || r}`)
+    .map(([who, r]) => `${who} said ${ratings().find((x) => x.r === r)?.label || r}`)
     .join(" · ");
 
   $("#bit-body").innerHTML = `
     ${bitFrame(b, autoplay)}
     <p class="bit-title">${b.display_title || ""}</p>
     <p class="bit-meta">${b.channel || ""}</p>
-    ${me ? `<div class="rate">${RATINGS.map((x) =>
+    ${me ? `<div class="rate">${ratings().map((x) =>
       `<button data-bit="${b.id}" data-r="${x.r}" class="${b.my_rating === x.r ? "on" : ""}">${
         x.label}</button>`).join("")}</div>` : ""}
     ${others ? `<p class="rate-note">${others}</p>` : ""}`;
@@ -345,7 +408,7 @@ const TIER_NAME = { 1: "Austin — full alarm", 2: "road trip", 3: "daydream (wo
 $("#add-form")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   const out = $("#add-result");
-  if (!authed()) { out.textContent = "Open your magic link first."; out.className = "bad"; return; }
+  if (!authed()) { out.textContent = COPY.add_needs_link; out.className = "bad"; return; }
 
   const body = Object.fromEntries(new FormData(e.target).entries());
   const res = await fetch("/api/events/manual", {
@@ -355,14 +418,15 @@ $("#add-form")?.addEventListener("submit", async (e) => {
   }).then((r) => r.json()).catch(() => null);
 
   if (!res || !res.ok) {
-    out.textContent = (res && res.detail) || "Couldn't add it.";
+    out.textContent = (res && res.detail) || COPY.add_failed;
     out.className = "bad";
     return;
   }
   // Tell them which tier it landed in — a show that silently lands in tier 3
   // will never notify anyone, and that's exactly the failure to avoid.
-  out.textContent = `${res.is_new ? "Added" : "Merged into a show we already had"} · ${
-    TIER_NAME[res.tier]}`;
+  out.textContent = res.tier === 3
+    ? COPY.add_tier3_warning
+    : `${res.is_new ? "Added" : "Merged into a show we already had"} · ${TIER_NAME[res.tier]}`;
   out.className = res.tier === 3 ? "bad" : "";
   e.target.reset();
   e.target.city.value = "Austin, TX";
@@ -371,6 +435,4 @@ $("#add-form")?.addEventListener("submit", async (e) => {
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");
 $("#push-btn")?.addEventListener("click", enablePush);
-load();
-loadBits();
-refreshPushState();
+loadCopy().then(() => { load(); loadBits(); refreshPushState(); });

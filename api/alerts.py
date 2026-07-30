@@ -44,6 +44,9 @@ def run_nags(con, now: datetime | None = None, dry_run: bool = False) -> list[di
             venue=ev["venue"], when=_when(ev["starts_at"]), city=ev["city"] or "",
             other=other["name"] if other else None, other_has_tickets=other_has,
             austin_status=ev["austin_status"], day=max(p.level - 2, 1),
+            # Seeded by the show, so the same alert never rewords itself between
+            # two glances at the same notification.
+            seed=p.event_id,
         )
 
         record = {

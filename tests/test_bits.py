@@ -126,6 +126,17 @@ class TestPool(unittest.TestCase):
         self.bits.record_served(self.con, yesterday["id"], d - timedelta(days=1))
         self.assertNotIn(yesterday["id"], [b["id"] for b in self.bits.eligible(self.con, d)])
 
+    def test_no_repeat_window_scales_to_the_pool(self):
+        """
+        A fixed 30-day window with 17 bits means everything has been served by
+        day 17 and the rule silently stops applying. The window has to describe
+        something real.
+        """
+        self.assertEqual(self.bits.no_repeat_days(2), 0)      # too few to bother
+        self.assertGreaterEqual(self.bits.no_repeat_days(17), 10)
+        self.assertLess(self.bits.no_repeat_days(17), 17)     # never exceeds the pool
+        self.assertEqual(self.bits.no_repeat_days(100), 30)   # capped
+
     def test_falls_back_rather_than_showing_nothing(self):
         """When everything's been served recently, repeat instead of going blank."""
         self.seed(2)

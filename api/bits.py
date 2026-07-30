@@ -33,8 +33,25 @@ from datetime import date, timedelta
 from . import db
 
 WEIGHTS = {"struts": 3, "fine": 1, None: 2}
-NO_REPEAT_DAYS = 30
+NO_REPEAT_MAX_DAYS = 30
 DAILY_KINDS = ("short", "clip")
+
+
+def no_repeat_days(pool_size: int) -> int:
+    """
+    How long to avoid repeating a bit, scaled to how many bits there ARE.
+
+    A fixed 30-day window with 17 bits in the pool means everything has been
+    served by day 17, the window matches nothing, and the fallback quietly drops
+    the no-repeat rule entirely. It degrades silently — the same failure pattern
+    this project keeps having to stamp out.
+
+    70% of the pool means the rule always describes something real, and the
+    window widens on its own as bits get added.
+    """
+    if pool_size <= 3:
+        return 0
+    return max(2, min(NO_REPEAT_MAX_DAYS, int(pool_size * 0.7)))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -190,6 +207,13 @@ def ratings_for(con, bit_id: str) -> dict:
 # The daily pick
 # ──────────────────────────────────────────────────────────────────────────────
 
+def pool_size(con) -> int:
+    return con.execute(
+        f"""SELECT COUNT(*) n FROM bits WHERE state='active' AND available=1
+            AND embeddable=1 AND kind IN ({','.join('?' * len(DAILY_KINDS))})""",
+        DAILY_KINDS).fetchone()["n"]
+
+
 def eligible(con, on: date) -> list[dict]:
     """
     The pool for a given day.
@@ -203,7 +227,7 @@ def eligible(con, on: date) -> list[dict]:
 
     So: skip what was served in the last 30 days, up to but NOT including today.
     """
-    cutoff = (on - timedelta(days=NO_REPEAT_DAYS)).isoformat()
+    cutoff = (on - timedelta(days=no_repeat_days(pool_size(con)))).isoformat()
     rows = con.execute(
         f"""SELECT b.* FROM bits b
             WHERE b.state='active' AND b.available=1 AND b.embeddable=1

@@ -111,7 +111,10 @@ def build_payload(*, title: str, body: str, event_id: str, tier: int,
     # to prevent — and it is never time-critical. Buying tickets is the only
     # urgent action, so it gets the whole notification and no neighbour to
     # mis-hit. Declining lives in the app, where there's room to be unambiguous.
-    actions = [{"action": "got_tickets", "title": "GOT 'EM"}] if tier in (1, 2) else []
+    from . import voice
+
+    actions = ([{"action": "got_tickets", "title": voice.UI["act_got"]}]
+               if tier in (1, 2) else [])
     return {
         "title": title,
         "body": body,
@@ -119,7 +122,14 @@ def build_payload(*, title: str, body: str, event_id: str, tier: int,
         "renotify": True,
         "requireInteraction": tier == 1,
         "actions": actions,
+        # The acknowledgement copy travels WITH the notification, so the service
+        # worker holds no voice of its own beyond a bare fallback. One place owns
+        # every string the app says.
         "data": {
+            # Acknowledgement copy travels with the notification so the service
+            # worker holds no voice of its own. notificationclick only has access
+            # to data{}, so it lives here rather than at the top level.
+            "ack": voice.ACK,
             "event_id": event_id,
             "ticket_url": ticket_url,
             "token": token,             # lets the SW acknowledge without the app

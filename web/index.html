@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Keep Austin Kinane</title>
-<link rel="manifest" href="/manifest.webmanifest?v=13">
+<link rel="manifest" href="/manifest.webmanifest?v=14">
 <meta name="theme-color" content="#141210">
-<link rel="stylesheet" href="/css/styles.css?v=13">
+<link rel="stylesheet" href="/css/styles.css?v=14">
 </head>
 <body>
 
@@ -25,11 +25,9 @@
        withholds the event. -->
   <div id="install-box" class="hidden">
     <button id="install-btn" class="cta">Install Uncle BBQ</button>
-    <p class="hint">Puts it on your home screen. Notifications work better once it's there.</p>
+    <p class="hint" id="install-why">Puts it on your home screen.</p>
   </div>
-  <p id="install-hint" class="hint hidden">
-    To install: tap <b>⋮</b> (top right) → <b>Add to Home screen</b> → <b>Install</b>.
-  </p>
+  <p id="install-hint" class="hint hidden"></p>
 
   <button id="push-btn" class="push">Turn on notifications</button>
 </header>
@@ -38,13 +36,13 @@
   <!-- Bit of the day. Thumbnail first, tap to play — autoplay with sound is
        blocked everywhere, and nobody wants a phone that starts talking. -->
   <section id="bit" class="bit hidden">
-    <h2>Bit of the day</h2>
+    <h2 id="h-bit">Bit of the day</h2>
     <div id="bit-body"></div>
   </section>
 
-  <section id="tier1" class="tier hidden"><h2>Austin</h2><div class="rows"></div></section>
-  <section id="tier2" class="tier hidden"><h2>Road trip</h2><div class="rows"></div></section>
-  <section id="tier3" class="tier hidden"><h2>Daydream</h2><div class="rows"></div></section>
+  <section id="tier1" class="tier hidden"><h2 id="h-tier1">Austin</h2><div class="rows"></div></section>
+  <section id="tier2" class="tier hidden"><h2 id="h-tier2">Road trip</h2><div class="rows"></div></section>
+  <section id="tier3" class="tier hidden"><h2 id="h-tier3">Daydream</h2><div class="rows"></div></section>
   <p id="empty" class="empty hidden">Nothing on the calendar.</p>
 
   <!--
@@ -53,7 +51,7 @@
     booking (their site blocks us, no aggregator carries them) or a drop-in.
   -->
   <details id="add-box">
-    <summary>Somebody told you about a show</summary>
+    <summary id="add-summary">Somebody told you about a show</summary>
     <form id="add-form">
       <input name="venue" list="venue-list" placeholder="Venue (e.g. Comedy Mothership)" required>
       <datalist id="venue-list"></datalist>
@@ -64,25 +62,25 @@
       </span>
       <input name="ticket_url" type="url" placeholder="Ticket link (optional)">
       <input name="note" placeholder="Who told you? (optional)">
-      <button type="submit">Add it</button>
+      <button type="submit" id="add-submit">Add it</button>
       <p id="add-result"></p>
     </form>
   </details>
 </main>
 
 <section id="shelf" class="hidden">
-  <h2>The shelf</h2>
-  <p class="shelf-note">Full sets. For when there's an hour.</p>
+  <h2 id="h-shelf">The shelf</h2>
+  <p class="shelf-note" id="shelf-note">Full sets.</p>
   <div id="shelf-body"></div>
 </section>
 
 <footer>
   <details>
-    <summary>What's being watched</summary>
+    <summary id="watching-summary">What's being watched</summary>
     <div id="sources"></div>
   </details>
 </footer>
 
-<script src="/js/app.js?v=13"></script>
+<script src="/js/app.js?v=14"></script>
 </body>
 </html>
