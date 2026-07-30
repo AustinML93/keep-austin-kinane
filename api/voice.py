@@ -63,6 +63,9 @@ TIER1 = {
         ("AUSTIN. KINANE. NOW.",
          "{venue}, {when}. Good news, arriving at an inconvenient moment, as it "
          "always does."),
+        ("It's happening. Here. Us.",
+         "{venue}, {when}. Everything this app has ever done was leading up to "
+         "sending you this."),
     ],
     1: [
         ("Two hours. Nothing from you.",
@@ -159,12 +162,25 @@ TIER2 = {
     ],
 }
 
+# The apology needs its OWN title. Bolting it onto the generic road-trip line
+# meant the notification announced a Dallas date and then apologised, which
+# buries the only genuinely funny thing the tiering rule produces.
+APOLOGY = [
+    ("Well. He's coming to Austin.",
+     "{venue}, {when} — the one you already bought. He announced Austin afterwards. "
+     "That one's on the app, and the app is sorry."),
+    ("About that drive.",
+     "You bought {city}. He has since announced Austin. I had one job and the timing "
+     "was not part of it."),
+]
+
 AUSTIN_NOTE = {
     "unknown": "No Austin date announced yet, so this might be the only shot — or the "
                "warm-up for one three weeks from now. I genuinely can't tell you which.",
     "superseded": "He's coming to Austin too, so nobody has to drive anywhere. Filed "
                   "away in case you want the drive anyway.",
-    "owed_an_apology": "He announced Austin. After you bought these. That one's on the "
+    # Kept for the in-app row; the notification uses APOLOGY instead.
+    "owed_an_apology": "He announced Austin after you bought these. That one's on the "
                        "app, and the app is sorry.",
 }
 
@@ -279,21 +295,28 @@ def nag(level: int, tier: int, *, venue: str, when: str, city: str = "",
     alert re-read an hour later must not have reworded itself.
     """
     if tier == 1:
-        table = TIER1
         lv = min(level, 4)
         if other_has_tickets and other and lv in TIER1_OTHER_HAS_TICKETS:
             options = TIER1_OTHER_HAS_TICKETS[lv]
         else:
-            options = table[lv]
+            options = TIER1[lv]
+    elif austin_status == "owed_an_apology":
+        # Overrides the level entirely. There is nothing to escalate — the app
+        # got it wrong and says so.
+        lv, options = level, APOLOGY
     else:
         lv = min(level, 3)
         options = TIER2[lv]
 
     title, body = pick(options, f"{seed}|{tier}|{level}")
+    # "Dallas, TX" is right in a data row and wrong in a sentence — "Last call on
+    # Dallas" reads like a person wrote it, "Last call on Dallas, TX" does not.
+    short_city = (city or "").split(",")[0].strip() or "out of town"
+
     fields = {
         "venue": venue or "somewhere",
         "when": when,
-        "city": city or "out of town",
+        "city": short_city,
         "other": other or "Your friend",
         "day": max(day, 1),
         "austin_note": AUSTIN_NOTE.get(austin_status or "", ""),

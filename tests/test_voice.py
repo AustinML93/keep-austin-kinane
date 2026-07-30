@@ -59,6 +59,40 @@ class TestEveryLineRenders(unittest.TestCase):
             self.assertNotIn("{", val, f"UI copy {key!r} has an unfilled placeholder")
 
 
+class TestProse(unittest.TestCase):
+
+    def test_city_loses_its_state_code_in_sentences(self):
+        """
+        "Last call on Dallas" reads like a person wrote it. "Last call on
+        Dallas, TX" reads like a database did.
+        """
+        title, body = voice.nag(3, 2, venue="Majestic", when="Sat",
+                                city="Dallas, TX", seed="x")
+        self.assertIn("Dallas", title + body)
+        self.assertNotIn("Dallas, TX", title + body)
+
+    def test_the_apology_has_its_own_title(self):
+        """
+        Bolting it onto the generic road-trip line announced a Dallas date and
+        THEN apologised, burying the only funny thing the tiering rule produces.
+        """
+        plain = voice.nag(0, 2, austin_status="unknown", venue="Majestic",
+                          when="Sat", city="Dallas, TX", seed="x")
+        sorry = voice.nag(0, 2, austin_status="owed_an_apology", venue="Majestic",
+                          when="Sat", city="Dallas, TX", seed="x")
+        self.assertNotEqual(plain[0], sorry[0])
+        self.assertRegex(sorry[0] + sorry[1], r"(?i)austin")
+        self.assertRegex(sorry[1], r"(?i)sorry|one job")
+
+    def test_the_apology_does_not_escalate(self):
+        """Nothing to escalate — the app was wrong and says so, once per level."""
+        for lv in range(4):
+            t, b = voice.nag(lv, 2, austin_status="owed_an_apology", venue="M",
+                             when="Sat", city="Dallas, TX", seed="x")
+            self.assertNotIn("{", t + b)
+            self.assertRegex(t + b, r"(?i)austin")
+
+
 class TestDeterminism(unittest.TestCase):
 
     def test_same_show_and_level_always_gives_the_same_line(self):
