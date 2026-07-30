@@ -285,7 +285,21 @@ function showRow(s, me) {
 
 function renderShows(data) {
   const shows = data.shows || [];
+  document.querySelectorAll(".more").forEach((b) => b.remove());
   $("#empty").classList.toggle("hidden", shows.length > 0);
+
+  /*
+   * How many rows a tier shows before it offers a "more" button.
+   *
+   * AUSTIN IS NEVER CAPPED. Hiding an Austin date behind a tap would defeat the
+   * entire app, and there will never be twelve of them anyway.
+   *
+   * Daydream is capped tight: 27 entries a thousand miles away shouldn't sit
+   * between you and the sections below it once the section is open. Road trip
+   * gets a high cap it will realistically never hit — it's a safety valve, not
+   * a feature.
+   */
+  const CAP = { 1: Infinity, 2: 8, 3: 4 };
 
   for (const tier of [1, 2, 3]) {
     const rows = shows.filter((s) => s.tier === tier);
@@ -295,8 +309,29 @@ function renderShows(data) {
     const sec = $(`#tier${tier}`);
     if (!rows.length) { box.classList.add("hidden"); continue; }
     box.classList.remove("hidden");
-    sec.querySelector(".rows").innerHTML = rows.map((s) => showRow(s, data.me)).join("");
+
+    const cap = CAP[tier];
+    const shown = rows.slice(0, cap);
+    const rest = rows.slice(cap);
+    const holder = sec.querySelector(".rows");
+    holder.innerHTML = shown.map((s) => showRow(s, data.me)).join("");
+
+    if (rest.length) {
+      const more = document.createElement("button");
+      more.className = "more";
+      more.textContent = `${rest.length} more`;
+      more.addEventListener("click", () => {
+        more.remove();
+        holder.insertAdjacentHTML("beforeend",
+          rest.map((s) => showRow(s, data.me)).join(""));
+      });
+      holder.after(more);
+    }
   }
+  // Clear any "more" buttons left from a previous render.
+  document.querySelectorAll(".tier .more, #tier3 .more").forEach((b) => {
+    if (!b.previousElementSibling?.querySelector(".show")) b.remove();
+  });
 
   document.querySelectorAll(".acts button").forEach((b) =>
     b.addEventListener("click", () => setState(b.dataset.ev, b.dataset.st)));
