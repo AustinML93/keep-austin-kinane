@@ -86,14 +86,46 @@ def cmd_shows() -> int:
 
 
 def cmd_health() -> int:
+    """Everything you'd want to know before deciding what to do next."""
+    from . import bits as bits_mod
     con = db.connect()
+
+    print("SOURCES")
     for s in db.source_health(con):
-        print(f"\n{s['name']}  [{s['id']}]")
-        print(f"  health         {HEALTH_MARK.get(s['health'], s['health'])}")
-        print(f"  last success   {s['last_success_at'] or 'never'}")
-        print(f"  last seen      {s['last_total_seen']} events (baseline {s['baseline_total']})")
+        print(f"  {s['id']:<14} {HEALTH_MARK.get(s['health'], s['health']):<36} "
+              f"{s['last_total_seen'] if s['last_total_seen'] is not None else '—'} listed")
         if s["last_error"]:
-            print(f"  error          [{s['last_error_kind']}] {s['last_error'][:120]}")
+            print(f"  {'':<14} └ [{s['last_error_kind']}] {s['last_error'][:100]}")
+
+    print("\nPEOPLE")
+    for u in db.users(con):
+        subs = db.subscriptions_for(con, u["id"])
+        role = "curator" if u["is_curator"] else "user"
+        state = f"{len(subs)} device(s)" if subs else "NOT SET UP — no push subscription"
+        print(f"  {u['name']:<6} {role:<8} {state}")
+        for s in subs:
+            ok = s["last_ok_at"] or "never"
+            print(f"  {'':<6} …{s['endpoint'][-12:]}  last ok {ok}  fails={s['failures']}")
+            if s["last_error"]:
+                print(f"  {'':<6}   └ {s['last_error'][:96]}")
+
+    print("\nSHOWS")
+    rows = db.upcoming(con)
+    by_tier = {t: sum(1 for r in rows if r["tier"] == t) for t in (1, 2, 3)}
+    print(f"  upcoming: {len(rows)}   austin={by_tier[1]} road={by_tier[2]} daydream={by_tier[3]}")
+
+    print("\nBITS")
+    pool = bits_mod.pool_size(con)
+    print(f"  daily pool {pool}   no-repeat {bits_mod.no_repeat_days(pool)}d   "
+          f"holds-up {len(bits_mod.holds_up(con))}   shelf {len(bits_mod.specials(con))}")
+
+    print("\nRECENT PUSH RECEIPTS")
+    rs = db.recent_receipts(con, 5)
+    if not rs:
+        print("  none — no push has reached a device")
+    for r in rs:
+        print(f"  {r['at']}  {r['stage']:<16} {r['user_id'] or '?'}")
+
     con.close()
     return 0
 
