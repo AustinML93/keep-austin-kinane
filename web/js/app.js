@@ -244,13 +244,7 @@ const AUSTIN_NOTE = {
   owed_an_apology: "Austin date appeared after you bought these. that one's on the app.",
 };
 
-const STATE_LABEL = {
-  unseen: "—",
-  seen: "seen it",
-  got_tickets: "GOT 'EM",
-  cant_make_it: "can't make it",
-  passing: "passing",
-};
+const stateLabel = (s) => COPY[`state_${s}`] || s;
 
 async function setState(eventId, state) {
   await fetch(`/api/events/${encodeURIComponent(eventId)}/state`, {
@@ -327,10 +321,26 @@ function load() {
   ])
     .then(([shows, health]) => {
       if (shows.me) localStorage.setItem("kak_me", shows.me);
-      renderShows(shows);
-      renderHealth(health);
+      // Render errors are reported SEPARATELY from fetch errors. A single catch
+      // around both meant a ReferenceError in my own rendering code displayed
+      // "Can't reach the server" — sending anyone debugging it straight at the
+      // network, which was fine. Same mistake as reporting push failures as a
+      // count: an error message that misdirects is worse than none.
+      try {
+        renderShows(shows);
+      } catch (e) {
+        console.error("[kak] renderShows failed:", e);
+      }
+      try {
+        renderHealth(health);
+      } catch (e) {
+        console.error("[kak] renderHealth failed:", e);
+        $("#status").textContent = `Display error: ${e.message}`;
+        $("#status").classList.add("bad");
+      }
     })
-    .catch(() => {
+    .catch((e) => {
+      console.error("[kak] fetch failed:", e);
       $("#status").textContent = COPY.offline;
       $("#status").classList.add("bad");
     });

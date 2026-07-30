@@ -17,7 +17,7 @@
 
 @font-face {
   font-family: "Anton";
-  src: url("/fonts/anton-latin.woff2?v=16") format("woff2");
+  src: url("/fonts/anton-latin.woff2?v=17") format("woff2");
   font-weight: 400;
   font-display: swap;         /* the app is readable before the font lands */
 }
