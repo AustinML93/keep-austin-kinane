@@ -281,8 +281,13 @@ Separate fetch errors from render errors. Return error text, never just counts.*
 
 ## Not built yet
 
-- **Rob is not set up** — no push subscription. The last unverified thing, and everything
-  we know about push we learned on Mike's phone. `cli health` says so plainly.
+- **Rob's delivery is unconfirmed.** He installed and subscribed (2026-08-02), and a test
+  push was accepted by the push service — but no `shown` receipt has come back from his
+  device yet. Until one does, everything we know about push we learned on Mike's phone.
+- **Bit trim points** — optional start/end offsets on a bit, set where renaming lives, so
+  the long middle of the pool (8–20 min) can play just the good part. YouTube embeds take
+  `?start=`/`&end=` in seconds, so this is player-side only. Deliberately parked
+  (2026-08-02): Mike wants to watch the current mix land for a while first.
 - **Moontower source** — seasonal, dormant until April.
 - **ntfy escalation fallback** — now lower priority: retry-on-unconfirmed covers the
   transient-loss case it was meant to insure against.
