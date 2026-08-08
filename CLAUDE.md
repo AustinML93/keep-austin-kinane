@@ -54,9 +54,9 @@ No build step. Vanilla PWA + **two containers** (nginx + one Python service).
 
 | Source | Status | Notes |
 |---|---|---|
-| `kylekinane` | ✅ primary | Supabase JSON API. 78 events, ticket links, showtimes, lat/long. |
+| `kylekinane` | ✅ primary | Supabase JSON API. 78 tour entries → **131 events after showtime expansion** (extra `showtimes[]` are extra DATES of a club run, not just late shows — taking only the first hid whole Fri/Sat nights). Per-showtime ticket links; the parent's link can be a dead `ticketlink.com` placeholder (Zanies). |
 | `capcity` | ✅ working | SeatEngine, 277 schema.org Events embedded in HTML. |
-| Moontower | ⏳ todo | `moontowercomedyfestival.com` (WordPress). **Seasonal — dormant is correct.** |
+| `moontower` | ✅ working | **Seasonal — dormant is correct.** The domain redirects to the Paramount's `austintheatre.org/moontower-comedy/` page; off-season the parser reads the "Here All Year" card grid, so it doubles as a Paramount-Austin watcher. ⚠️ Never verified against a real April lineup page — re-probe before festival season. |
 | `ticketmaster` | ✅ working | Set `TICKETMASTER_API_KEY` (the **Consumer Key**, not the Secret). Only source with a real **on-sale time**. Registers only when the key is present. |
 | Bandsintown | ⛔ 403 | Needs a registered `app_id`. Moot — the official feed is better. |
 | Mothership | ⛔ blocked | HTTP 429 to everything. **Do not try to defeat it.** Confirmed NOT carried by Ticketmaster either. Covered only by `manual`. |
@@ -81,7 +81,7 @@ python3 -m api.cli vapid                      # push public key (generated once,
 python3 -m api.cli simulate                   # fake a tier-1 Austin show...
 python3 -m api.cli nags --dry-run             # ...and watch the ladder without sending
 python3 -m api.cli unsimulate
-python3 -m unittest discover -s tests -t .   # 49 tests, no network
+python3 -m unittest discover -s tests -t .   # 169 tests, no network (a few skip without fastapi/pywebpush)
 python3 recon/probe_sources.py               # re-probe source viability
 ```
 
@@ -89,7 +89,14 @@ python3 recon/probe_sources.py               # re-probe source viability
 
 - **Secrets live in `.env` beside `docker-compose.yml`** on the box — gitignored, and
   `docker compose` reads it automatically. See `.env.example` for the full list
-  (`TICKETMASTER_API_KEY`, `YOUTUBE_API_KEY`, `KAK_BITS_PLAYLIST`). Never the repo.
+  (`TICKETMASTER_API_KEY`, `YOUTUBE_API_KEY`, `KAK_BITS_PLAYLIST`, `WATCHDOG_URL`).
+  Never the repo.
+- **Magic links use the fragment** (`/#t=…`), not a query param — a `?t=` lands in
+  Cloudflare/nginx access logs on every open. `app.js` still reads `?t=` as a fallback for
+  links issued before the switch.
+- **Ops endpoints require a token.** `/api/poll`, `/api/nags/run`, and `/api/backup/latest`
+  all authenticate via magic-link token (body/query or `Authorization` header). They shipped
+  open once; `tests/test_api_auth.py` fails if that regresses.
 - For local CLI runs: `set -a; source .env; set +a` then `python3 -m api.cli …`
 - **Port 7730** (the 773 Chicago area code). Cloudflare tunnel routes
   `keepaustinkinane.austinmlapps.com` → `http://localhost:7730`. Mike owns tunnel/DNS.
@@ -148,6 +155,18 @@ the first live pull). The tier-2 deadline is anchored to on-sale, so a past dead
 every level overdue at once — "Last call" on announcement day. Filtered in the source AND
 defended in `decision_deadline()`. Treat any source's date fields as hostile.
 
+**Every tier-2 deadline is floored at discovery + 2 days** (`PAST_DEADLINE_GRACE`). A show
+found late — inside the 21-day lead, or already on sale when we first saw it (normal, and
+urgent, not corrupt) — used to compute a deadline in the past, which is the sentinel blast
+by another road. Urgency compresses the ladder into the grace window; it never detonates it.
+
+**Vanish detection** (`db.reconcile_listings`, run every poll): an upcoming show goes
+`listing_status='unconfirmed'` only when EVERY automatic source that ever reported it has
+polled **healthily** for 48h without listing it. A broken source cannot condemn its
+catalogue — its silence is ignorance, not evidence. Manual-only shows never expire.
+Unconfirmed **pauses** the ladder (it is not a decision); reappearing in any source heals
+the flag and resumes it.
+
 **Dedupe:** `dedupe_key()` is date|venue|time so a 7:00 and a 9:15 stay separate. A source
 giving a date with NO time (the official feed does — Cobb's 2026-12-04) folds into the
 earliest known showtime at that venue via `loose_key()`, rather than becoming a phantom
@@ -191,6 +210,11 @@ add; either might hear first.
   note must never delete the show.
 - `manual` is excluded from the blind/health calculation — a human is not a scraper and
   cannot go dark.
+- **Android share target** (`manifest.webmanifest` → `/share`): sharing a post or link from
+  any app straight to Uncle BBQ opens the add form prefilled — the link lands in ticket_url,
+  the text (minus the link) in the "who told you?" note. Closes the retype gap on the app's
+  only Mothership coverage. nginx needs no route; `try_files` already falls through to the
+  shell.
 
 ## Bits
 
@@ -252,10 +276,30 @@ race is unfixed.
 API, **not a file copy**: in WAL mode recent commits live in the `-wal`, and a
 `cp` catching one without the other is a backup that only fails when you need it.
 
+**Off-box copies:** `GET /api/backup/latest` (token-authed) streams the newest
+snapshot; `scripts/pull_backup.sh` wraps it with an integrity check and keeps 14,
+meant to run from Mike's Mac on cron/launchd. Seven siblings beside the live
+database cover a bad write; they do nothing for the OMV disk dying.
+
 Losing the DB costs: the VAPID keypair (**regenerating invalidates every push
 subscription — both users re-enable notifications**), both magic-link tokens,
 every bit rating and the Holds up list, ticket decisions, nag history. None of it
 recoverable from the sources.
+
+## The app watches itself, and something else watches the app
+
+- `/api/health` **fails closed on staleness**: if the newest poll attempt is
+  older than two cycles (`STALE_AFTER_S`, read from the sources table so a
+  restart doesn't reset the clock), `all_eyes_open` goes false and the status
+  line names the app's own watcher as blind. The UI appends "checked Nm ago" —
+  a claim about now has to carry its age.
+- `WATCHDOG_URL` (optional, healthchecks.io): pinged after every **successful**
+  poll cycle. When pings stop, the external service alerts through its own
+  channel — the machine promising "silence means nothing" is no longer the only
+  machine checking whether it's alive.
+- 'degraded' (1–2 consecutive failures) deliberately does NOT count as blind —
+  the grace window before 'down' at 3. A status line that cries wolf on every
+  transient failure is a status line nobody reads.
 
 ## Look and feel
 
@@ -288,9 +332,12 @@ Separate fetch errors from render errors. Return error text, never just counts.*
   the long middle of the pool (8–20 min) can play just the good part. YouTube embeds take
   `?start=`/`&end=` in seconds, so this is player-side only. Deliberately parked
   (2026-08-02): Mike wants to watch the current mix land for a while first.
-- **Moontower source** — seasonal, dormant until April.
-- **ntfy escalation fallback** — now lower priority: retry-on-unconfirmed covers the
-  transient-loss case it was meant to insure against.
+- **ntfy escalation fallback** — now lower priority twice over: retry-on-unconfirmed covers
+  transient loss, and the `WATCHDOG_URL` dead-man switch covers the app dying outright.
 - The deploy/in-flight-push race described above.
+- **Moontower in-season lineup** — the source is live but has only ever parsed the
+  off-season page. Re-probe when the April lineup posts.
+- **Watchdog + off-box backup need one-time setup by Mike**: a healthchecks.io check into
+  `WATCHDOG_URL` in `.env`, and `scripts/pull_backup.sh` on a Mac cron/launchd.
 
 See **Status** and **Next steps** in `SPEC.md`.

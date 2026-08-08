@@ -18,7 +18,7 @@ import time
 from datetime import datetime
 
 from fastapi import Body, FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from . import bits as bits_mod
 from . import db, push, venues, voice
@@ -50,9 +50,22 @@ def _loop(fn, interval, state):
         time.sleep(interval)
 
 
+# A dead-man switch (e.g. a healthchecks.io ping URL). The machine promising
+# "silence means nothing is happening" cannot be the only machine checking
+# whether it's alive — if these pings stop, the external service raises the
+# alarm through its own channel, which this box can't take down with it.
+WATCHDOG_URL = os.environ.get("WATCHDOG_URL", "")
+
+
 def _do_poll():
     report = poll_once()
     _last_poll.update(at=db.now(), new=len(report.new_events), error=None)
+    if WATCHDOG_URL:
+        # Only after a SUCCESSFUL cycle — a watchdog pinged from a broken loop
+        # is a watchdog that lies. http_get swallows its own errors; a missed
+        # ping must never take down polling.
+        from .sources.base import http_get
+        http_get(WATCHDOG_URL)
 
 
 def _do_backup():
@@ -436,6 +449,12 @@ def push_receipt(payload: dict = Body(...)):
 # Health — a user-facing feature, not ops hygiene
 # ──────────────────────────────────────────────────────────────────────────────
 
+# How old the newest poll attempt can be before "all eyes open" becomes a
+# claim we refuse to make. Two missed cycles plus slack: one late cycle is a
+# slow scraper, two is a stopped poller.
+STALE_AFTER_S = POLL_INTERVAL * 2 + 900
+
+
 @app.get("/api/health")
 def health():
     con = db.connect()
@@ -450,12 +469,30 @@ def health():
     watchers = [s for s in sources if s["kind"] != "manual"]
     blind = [s for s in watchers if s["health"] in ("suspicious", "down", "config_failed")]
     config_lost = any(s["health"] == "config_failed" for s in watchers)
+
+    # "All eyes open" is a claim about NOW, so it has to carry a timestamp and
+    # fail closed when that timestamp is old. A poller that stopped days ago
+    # would otherwise keep reporting well-informed nothing forever — read from
+    # the sources table, not _last_poll, so a restart doesn't reset the clock.
+    checked_ago_s = None
+    stale = False
+    attempts = [s["last_attempt_at"] for s in watchers if s["last_attempt_at"]]
+    if attempts:
+        try:
+            newest = datetime.fromisoformat(max(attempts))
+            checked_ago_s = int((datetime.now(newest.tzinfo) - newest).total_seconds())
+            stale = checked_ago_s > STALE_AFTER_S
+        except ValueError:
+            stale = True
+    blind_names = (["the app's own watcher"] if stale else []) + [s["name"] for s in blind]
     return {
         "sources": sources,
-        "all_eyes_open": not blind,
+        "all_eyes_open": not blind and not stale,
+        "stale": stale,
+        "checked_ago_s": checked_ago_s,
         "blind": [s["id"] for s in blind],
         "status_line": voice.status_line(
-            len(watchers), [s["name"] for s in blind], config_lost,
+            len(watchers), blind_names, config_lost,
             seed=datetime.now().date().isoformat()),
         "subscriptions": subs,
         "last_poll": _last_poll,
@@ -473,8 +510,19 @@ def db_receipts():
         con.close()
 
 
+# The force endpoints and the backup download require a magic-link token like
+# everything else that acts. They used to be open, which meant anyone on the
+# internet could make this box hammer its sources — sources this project is
+# deliberately polite to, one of which already 429s strangers on principle.
+
 @app.post("/api/poll")
-def force_poll():
+def force_poll(payload: dict = Body(default={}),
+               authorization: str | None = Header(None)):
+    con = db.connect()
+    try:
+        _user_from(con, payload.get("token") or authorization)
+    finally:
+        con.close()
     try:
         report = poll_once()
         return {"new_events": report.new_events, "per_source": report.per_source}
@@ -483,9 +531,32 @@ def force_poll():
 
 
 @app.post("/api/nags/run")
-def force_nags(dry_run: bool = False):
+def force_nags(dry_run: bool = False, payload: dict = Body(default={}),
+               authorization: str | None = Header(None)):
     con = db.connect()
     try:
+        _user_from(con, payload.get("token") or authorization)
         return {"nags": run_nags(con, dry_run=dry_run)}
     finally:
         con.close()
+
+
+@app.get("/api/backup/latest")
+def backup_latest(authorization: str | None = Header(None),
+                  token: str | None = None):
+    """
+    Stream the newest snapshot, so backups can live somewhere other than the
+    disk they protect. Seven siblings beside the live database cover a bad
+    write; they do nothing for the drive dying. scripts/pull_backup.sh on any
+    other machine turns this into an off-box copy.
+    """
+    con = db.connect()
+    try:
+        _user_from(con, token or authorization)
+    finally:
+        con.close()
+    snapshots = sorted((db.DB_PATH.parent / "backups").glob("kak-*.sqlite3"))
+    if not snapshots:
+        raise HTTPException(404, "no snapshots yet — the daily backup thread hasn't run")
+    return FileResponse(snapshots[-1], filename=snapshots[-1].name,
+                        media_type="application/octet-stream")

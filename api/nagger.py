@@ -54,6 +54,14 @@ TIER2_LEVELS = 3
 # be made three weeks out. Sanity-check this against reality — see SPEC open Qs.
 DEFAULT_DECISION_LEAD = timedelta(days=21)
 
+# The floor under any deadline: never closer than this to discovery. A show
+# found late — inside the 21-day lead, or after tickets already went on sale —
+# would otherwise get a deadline in the past, which makes every level due at
+# once and produces "Last call" the tick after "he announced a show". The
+# decision may genuinely be urgent; urgent means compressed into two days, not
+# the whole ladder in fifteen minutes.
+PAST_DEADLINE_GRACE = timedelta(days=2)
+
 
 @dataclass
 class NagPlan:
@@ -102,9 +110,15 @@ def decision_deadline(onsale_at: datetime | None, show_at: datetime,
     where a bad value does real damage: a deadline in the past makes every
     escalation level overdue at once, so a show announced this morning would get
     "Last call" before lunch. Anything at or before the announcement is not a
-    deadline, it's a data error — fall back to the lead-time guess.
+    deadline we can anchor to — either a data error (the sentinel) or a show we
+    discovered after tickets were already selling, which is normal, and urgent
+    rather than corrupt. Both land on the lead-time guess, floored at
+    PAST_DEADLINE_GRACE after discovery so urgency compresses the ladder
+    instead of detonating it.
     """
     fallback = show_at - DEFAULT_DECISION_LEAD
+    if first_seen:
+        fallback = max(fallback, first_seen + PAST_DEADLINE_GRACE)
     if not onsale_at:
         return fallback
     if onsale_at >= show_at:
@@ -182,6 +196,12 @@ def plan(con, now: datetime | None = None) -> list[NagPlan]:
 
     for ev in db.upcoming(con):
         if ev["tier"] == 3:
+            continue
+        # Unconfirmed = every healthy source stopped listing it (see
+        # db.reconcile_listings). Nagging about a probably-cancelled show
+        # teaches both users to swipe nags away, which is how a real one dies.
+        # This PAUSES the ladder, it doesn't decide — reappearing resumes it.
+        if ev.get("listing_status") == "unconfirmed":
             continue
         show_at = _parse(ev["starts_at"])
         first_seen = _parse(ev["first_seen_at"])

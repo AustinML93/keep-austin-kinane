@@ -18,15 +18,15 @@
  *    See CLAUDE.md — Cloudflare's 4h edge cache will otherwise serve the old one.
  */
 
-const CACHE = "kak-v18";
+const CACHE = "kak-v19";
 const SHELL = [
   "/",
   "/index.html",
-  "/css/styles.css?v=18",
-  "/js/app.js?v=18",
-  "/manifest.webmanifest?v=18",
-  "/icons/icon-192.png?v=18",
-  "/fonts/anton-latin.woff2?v=18",
+  "/css/styles.css?v=19",
+  "/js/app.js?v=19",
+  "/manifest.webmanifest?v=19",
+  "/icons/icon-192.png?v=19",
+  "/fonts/anton-latin.woff2?v=19",
 ];
 
 self.addEventListener("install", (e) => {
@@ -130,16 +130,29 @@ self.addEventListener("push", (e) => {
   })());
 });
 
+// A 401 or 500 here resolves the fetch promise like any other response, and an
+// acknowledged decision that the server actually rejected means the ladder keeps
+// running while the user believes it stopped. Reject so the catch path reports
+// action_failed and opens the app instead of lying.
 const setState = (d, state) =>
   fetch(`/api/events/${encodeURIComponent(d.event_id)}/state`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ state, token: d.token }),
+  }).then((res) => {
+    if (!res.ok) throw new Error(`state update rejected: HTTP ${res.status}`);
+    return res;
   });
 
-const ACK = {
+// The real copy rides in the push payload (voice.py owns it); this exists only
+// for notifications sent before the payload carried it. Keys must cover
+// everything the handlers below read — undo_label included — or a missing one
+// throws mid-acknowledgement.
+const ACK_FALLBACK = {
   got_tickets: "Got 'em. I'll stop.",
   cant_make_it: "Noted — you can't go. I'll stop.",
+  undone: "Undone. You're still on the hook.",
+  undo_label: "UNDO",
 };
 
 self.addEventListener("notificationclick", (e) => {
@@ -157,8 +170,12 @@ self.addEventListener("notificationclick", (e) => {
    */
   if (e.action === "got_tickets" || e.action === "cant_make_it") {
     e.waitUntil((async () => {
-      const ack = { ...ACK_FALLBACK, ...(d.ack || {}) };
+      // Inside the try: this exact line once threw (ACK_FALLBACK was renamed on
+      // one side of a refactor) and, being outside, died before even the click
+      // receipt — a broken button with no receipt is invisible to the one system
+      // built to notice it.
       try {
+        const ack = { ...ACK_FALLBACK, ...(d.ack || {}) };
         // Report EXACTLY what Chrome handed us, before acting on it. Tapping the
         // button labelled GOT 'EM twice produced cant_make_it, and guessing at
         // why is how you fix the wrong thing.

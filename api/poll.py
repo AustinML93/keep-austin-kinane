@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from . import db
 from .sources.capcity import CapCity
 from .sources.kylekinane import KyleKinaneOfficial
+from .sources.moontower import MoontowerComedyFestival
 from .sources.ticketmaster import Ticketmaster
 from .tiering import apply_austin_rule, tier_for
 
@@ -26,7 +27,11 @@ def active_sources() -> list:
     readout, and a status line that always complains is a status line nobody
     reads — which is how a REAL warning gets ignored later.
     """
-    sources = [KyleKinaneOfficial(), CapCity()]
+    # Moontower is seasonal — empty most of the year reads as 'dormant', not
+    # broken. Bonus: its domain redirects to the Paramount's page, whose
+    # year-round comedy card grid this parser reads, so it also watches
+    # Austin's Paramount between festivals.
+    sources = [KyleKinaneOfficial(), CapCity(), MoontowerComedyFestival()]
     tm = Ticketmaster()
     if tm.api_key:
         sources.append(tm)
@@ -44,21 +49,29 @@ class PollReport:
 
 
 def poll_once(con=None, sources=None) -> PollReport:
-    own = con is None
-    con = con or db.connect()
     sources = sources or active_sources()
     new_events: list[dict] = []
     per_source: dict[str, str] = {}
 
-    try:
-        for src in sources:
-            try:
-                result = src.fetch()
-            except Exception as e:  # a source must never take down the cycle
-                from .sources.base import FetchResult
-                result = FetchResult(src.id, ok=False, error=f"{type(e).__name__}: {e}",
-                                     error_kind="parse")
+    # FETCH EVERYTHING BEFORE WRITING ANYTHING. The first upsert opens SQLite's
+    # write transaction, and holding it across the remaining sources' network
+    # calls means a decision tap on a phone can sit behind a slow scraper until
+    # it times out. Fetching takes as long as it takes; the write pass is
+    # milliseconds.
+    results = []
+    for src in sources:
+        try:
+            result = src.fetch()
+        except Exception as e:  # a source must never take down the cycle
+            from .sources.base import FetchResult
+            result = FetchResult(src.id, ok=False, error=f"{type(e).__name__}: {e}",
+                                 error_kind="parse")
+        results.append((src, result))
 
+    own = con is None
+    con = con or db.connect()
+    try:
+        for src, result in results:
             for ev in result.events:
                 tier, dist = tier_for(ev.latitude, ev.longitude, ev.city, ev.address)
                 if db.upsert_event(con, ev, tier, dist):
@@ -73,8 +86,15 @@ def poll_once(con=None, sources=None) -> PollReport:
 
         # Tiering rules run across the merged set, not per source.
         events = db.upcoming(con)
+        # "Bought" means either of them committed — the apology rule fires when
+        # an Austin date lands after road-trip tickets are already in hand, and
+        # decisions live in user_events, not on the event row.
+        for e in events:
+            e["tickets_bought"] = "got_tickets" in db.states_for_event(con, e["id"]).values()
         for e in apply_austin_rule(events):
             db.set_austin_status(con, e["id"], e.get("austin_status"))
+
+        db.reconcile_listings(con)
 
         con.commit()
         return PollReport(new_events, db.source_health(con), per_source)

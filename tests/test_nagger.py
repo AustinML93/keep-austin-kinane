@@ -149,6 +149,43 @@ class TestBadOnsaleDates(unittest.TestCase):
                       onsale_at=sentinel))
 
 
+class TestLateDiscovery(unittest.TestCase):
+    """
+    Shows we learn about late — inside the 21-day lead, or after tickets
+    already went on sale. Both are normal (an already-on-sale show is arguably
+    the MOST urgent case), and both used to produce a deadline in the past,
+    which is the every-level-at-once blast by another road. Urgency should
+    compress the ladder into the grace window, not detonate it.
+    """
+
+    def test_deadline_never_lands_before_the_grace_window(self):
+        """Discovered 10 days out: show−21d is in the past; the floor holds."""
+        found = SHOW - timedelta(days=10)
+        self.assertEqual(decision_deadline(None, SHOW, found),
+                         found + timedelta(days=2))
+
+    def test_already_onsale_show_gets_the_graced_fallback(self):
+        """On sale before we ever saw it — normal, not corrupt."""
+        found = SHOW - timedelta(days=10)
+        onsale = found - timedelta(days=3)
+        self.assertEqual(decision_deadline(onsale, SHOW, found),
+                         found + timedelta(days=2))
+
+    def test_late_discovery_compresses_but_does_not_blast(self):
+        """First contact is the news; then 'decide', and 'last call' waits the
+        full grace window instead of arriving fifteen minutes later."""
+        found = SHOW - timedelta(days=5)
+        self.assertEqual(due_level(found, found, 2, [], SHOW), 0)
+        lv = due_level(found + timedelta(hours=1), found, 2, [0], SHOW)
+        self.assertEqual(lv, 2)          # "decide", immediately — it IS urgent, but not "last call"
+        self.assertEqual(due_level(found + timedelta(days=2), found, 2, [0, 1, 2], SHOW), 3)
+
+    def test_comfortable_discovery_is_untouched_by_the_floor(self):
+        """Six weeks of runway: the normal show−21d fallback still applies."""
+        self.assertEqual(decision_deadline(None, SHOW, ANNOUNCED),
+                         SHOW - timedelta(days=21))
+
+
 class TestTier3(unittest.TestCase):
     def test_daydreams_never_nag(self):
         self.assertIsNone(due_level(ANNOUNCED, ANNOUNCED, 3, [], SHOW))

@@ -141,7 +141,9 @@ def cmd_adduser() -> int:
     token = db.add_user(con, uid, name, curator)
     base = os.environ.get("KAK_BASE_URL", "https://keepaustinkinane.austinmlapps.com")
     print(f"\n{name} ({uid}){'  [curator]' if curator else ''}")
-    print(f"magic link:  {base}/?t={token}")
+    # Fragment, not query param — a #t= never leaves the browser, while a ?t=
+    # is written into Cloudflare and nginx access logs on every open.
+    print(f"magic link:  {base}/#t={token}")
     print("\nOpen it on their phone, then Add to Home Screen. The token lands in")
     print("localStorage; there's no password to forget.\n")
     con.close()

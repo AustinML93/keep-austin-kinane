@@ -15,11 +15,17 @@ and — if we weren't careful — the app would report "no upcoming shows" forev
 That is the exact failure this project exists to prevent, so a failed config
 scrape returns error_kind="config" and is surfaced as its own health state.
 
-Payload shape (verified 2026-07-29, 78 events):
+Payload shape (verified 2026-07-29, 78 top-level events):
     startDate startTime timezone status presaleActive
     venue displayVenue address city displayCity latitude longitude
     ticketLinks[]  {linkType, ticketLink, buttonText}
     showtimes[]    {date, time, utcTimestamp, ticketLinks[]}
+
+A top-level entry is one BOOKING, not one show. A club run shows up as a
+single entry whose showtimes[] span several dates (Helium Comedy Club,
+2026-01-08 through 2026-01-10, five showtimes across three nights) — so we
+expand every showtime into its own Event rather than taking showtimes[0].
+78 top-level entries currently expand to 131 shows.
 """
 
 from __future__ import annotations
@@ -82,34 +88,52 @@ class KyleKinaneOfficial:
         except Exception as e:
             return FetchResult(self.id, ok=False, error=f"unexpected payload: {e}", error_kind="parse")
 
-        events = [e for e in (self._to_event(r) for r in raw_events) if e]
+        events = [e for r in raw_events for e in self._to_events(r)]
         return FetchResult(
             self.id, ok=True, events=events, total_seen=len(raw_events),
-            note=f"{len(events)} parsed from {len(raw_events)} listed",
+            note=f"{len(events)} events from {len(raw_events)} listed",
         )
 
-    def _to_event(self, r: dict) -> Event | None:
+    def _to_events(self, r: dict) -> list[Event]:
         date = r.get("startDate")
         if not date:
-            return None
+            return []
 
-        # Prefer the first showtime — it carries the real per-show ticket link.
-        # Clubs list two a night and the top-level ticketLinks can be generic.
+        # A "showtime" is an extra DATE, not just an extra time of night — a
+        # club run like Helium's Jan 8-10 comes back as ONE top-level entry
+        # with five showtimes spanning three nights. Collapsing to showtimes[0]
+        # (the old behavior) silently deletes whole nights of a run; the fix is
+        # to emit one Event per showtime. Entries with no showtimes array at
+        # all fall back to the top-level startDate/startTime, same as before.
         showtimes = r.get("showtimes") or []
-        first = showtimes[0] if showtimes else {}
-        time_s = (first.get("time") or r.get("startTime") or "")[:5]
+        if not showtimes:
+            return [self._build(r, date, r.get("startTime"), r.get("ticketLinks") or [])]
+
+        return [
+            self._build(r, st.get("date") or date, st.get("time"),
+                        st.get("ticketLinks") or r.get("ticketLinks") or [])
+            for st in showtimes
+        ]
+
+    def _build(self, r: dict, date: str, time_raw: str | None, links: list[dict]) -> Event:
+        time_s = (time_raw or "")[:5]
         starts_at = f"{date}T{time_s}" if time_s else date
 
-        links = first.get("ticketLinks") or r.get("ticketLinks") or []
         ticket_url = next(
             (l.get("ticketLink") for l in links
              if l.get("ticketLink") and "ticketlink.com" not in l["ticketLink"]),
             None,
         )
 
+        # Every showtime shares the parent's r["id"], so the date+time has to
+        # be baked in here — otherwise five nights of the same club run
+        # collide onto one external_id and four of them vanish on upsert.
+        parent_id = r.get("id") or f"{date}-{r.get('venue', '')}"
+        external_id = f"{parent_id}-{date}-{time_s or 'na'}"
+
         return Event(
             source_id=self.id,
-            external_id=str(r.get("id") or f"{date}-{r.get('venue','')}"),
+            external_id=external_id,
             starts_at=starts_at,
             title=r.get("displayVenue") or r.get("venue"),
             venue=r.get("displayVenue") or r.get("venue"),

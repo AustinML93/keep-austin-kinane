@@ -522,6 +522,27 @@ rather than failing loudly.
 covers the transient-loss case it was meant to insure against, and it needs a
 topic decision.
 
+## Status — reliability pass (2026-08-07)
+
+An external review (Codex) was verified claim by claim and everything real got
+fixed in one pass. 169 tests.
+
+| Fix | State |
+|---|---|
+| SW `ACK_FALLBACK` ReferenceError — GOT 'EM was dead, silently, no receipt | ✅ fixed; `setState` now rejects non-2xx; cache `kak-v19` |
+| Official feed dropped 53 showtimes (extra DATES of club runs, not late shows) | ✅ every showtime expands; per-showtime ticket links; 78 → 131 |
+| `/api/poll`, `/api/nags/run` open to the internet | ✅ token-authed, plus new `/api/backup/latest`; `tests/test_api_auth.py` |
+| "All eyes open" could be days stale | ✅ fails closed after 2 missed cycles; UI shows "checked Nm ago" |
+| Late/already-on-sale discovery blasted the tier-2 ladder | ✅ deadline floored at discovery + 2d (`PAST_DEADLINE_GRACE`) |
+| Cancelled shows never noticed | ✅ `reconcile_listings`: unconfirmed after 48h unlisted by healthy sources only; pauses nags; heals on reappearance |
+| Poller held write txn across network fetches | ✅ fetch-all-then-write |
+| Austin apology unreachable (`tickets_bought` never populated) | ✅ wired from `user_events` in the poll cycle |
+| Moontower | ✅ built, seasonal-dormant; reads the Paramount "Here All Year" grid off-season |
+| Backups on the same disk they protect | ✅ authed download + `scripts/pull_backup.sh` (needs a cron on Mike's Mac) |
+| Magic links in access logs | ✅ `#t=` fragment; `?t=` still honored |
+| No external watchdog | ✅ `WATCHDOG_URL` dead-man ping after successful polls (needs healthchecks.io setup) |
+| Android share target | ✅ share a post → add form prefilled |
+
 ## Next steps
 
 **Immediate, and the only one that matters:**

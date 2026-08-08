@@ -5,7 +5,8 @@ First time only. After this, shipping is `git push` here + `./deploy.sh` there.
 ## 1. Clone it
 
 ```bash
-ssh deploy@192.168.1.200
+ssh omv     # NOT deploy@192.168.1.200 — ssh_config matches on the name you typed,
+            # and the raw IP misses the Host block that carries the key
 cd /srv/dev-disk-by-uuid-5c291e74-2a76-4eb0-924b-7bf8f9eca72c/compose
 git clone https://github.com/AustinML93/keep-austin-kinane.git
 cd keep-austin-kinane
@@ -18,8 +19,9 @@ cp .env.example .env
 nano .env
 ```
 
-Fill in `TICKETMASTER_API_KEY`, `YOUTUBE_API_KEY`, and `KAK_BITS_PLAYLIST`.
-`.env` is gitignored and `docker compose` reads it automatically.
+Fill in `TICKETMASTER_API_KEY`, `YOUTUBE_API_KEY`, `KAK_BITS_PLAYLIST`, and
+(once created, step 8) `WATCHDOG_URL`. `.env` is gitignored and `docker compose`
+reads it automatically.
 
 ## 3. Up
 
@@ -97,6 +99,31 @@ The nagging is the product. It has never run against a real phone.
 on one device and silently fails on the other is exactly the miss this app
 exists to prevent.
 
+## 8. The two watchers that live off the box
+
+Both one-time, both on machines that are NOT the OMV box — that's the point.
+
+**Dead-man switch.** Create a free check at healthchecks.io (period 2h, grace
+1h — polls are hourly), paste its ping URL into `WATCHDOG_URL` in `.env`, then
+`docker compose up -d --force-recreate api`. The app pings it after every
+successful poll cycle; when the pings stop, healthchecks alerts by email. The
+machine promising "silence means nothing is happening" is no longer the only
+machine checking whether it's alive.
+
+**Off-box backups.** On Mike's Mac:
+
+```bash
+# once, to test (KAK_TOKEN = the token from your own magic link)
+KAK_TOKEN=... ./scripts/pull_backup.sh
+
+# then schedule it — crontab -e, daily at 7am:
+0 7 * * * KAK_TOKEN=... /path/to/keep-austin-kinane/scripts/pull_backup.sh
+```
+
+It pulls the newest snapshot via `/api/backup/latest`, verifies it's actually
+SQLite, and keeps 14 in `~/Backups/keep-austin-kinane/`. The seven snapshots on
+the box cover a bad write; this covers the disk.
+
 ## Shipping changes after this
 
 ```bash
@@ -112,7 +139,7 @@ This cost real time on DawgHaus once already.
 
 ⚠️ On any change to a shell asset, bump `?v=N` in `web/index.html` **and** the
 `SHELL` list in `web/sw.js`, plus `CACHE = "kak-vN"`. Cloudflare edge-caches for
-4h and will happily serve the old one. Currently at **v3**.
+4h and will happily serve the old one. Currently at **v19**.
 
 ## If something's wrong
 

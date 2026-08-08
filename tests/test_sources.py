@@ -24,9 +24,14 @@ class TestOfficialFeed(unittest.TestCase):
         cls.result = KyleKinaneOfficial().parse(cls.body)
 
     def test_parses_the_whole_feed(self):
+        """
+        total_seen counts top-level bookings (78); events counts actual shows
+        (131) — a booking's showtimes[] can span several dates (club runs),
+        and each one is a separate night someone could miss.
+        """
         self.assertTrue(self.result.ok)
         self.assertEqual(self.result.total_seen, 78)
-        self.assertEqual(len(self.result.events), 78)
+        self.assertEqual(len(self.result.events), 131)
 
     def test_events_carry_coordinates(self):
         """Tiering is a distance calculation — no coordinates, no tiers."""
@@ -57,6 +62,92 @@ class TestOfficialFeed(unittest.TestCase):
         self.assertFalse(r.ok)
         self.assertEqual(r.error_kind, "parse")
         self.assertEqual(r.events, [])
+
+    def test_club_run_expands_into_every_night(self):
+        """
+        Helium Comedy Club's Jan 8-10 booking is ONE top-level entry with FIVE
+        showtimes across three nights. Taking only showtimes[0] (the bug) kept
+        just the Jan 8 7:30 and silently dropped two full club nights.
+        """
+        helium = sorted(
+            (e for e in self.result.events
+             if e.venue == "Helium Comedy Club" and e.starts_at.startswith("2026-01")),
+            key=lambda e: e.starts_at,
+        )
+        self.assertEqual(len(helium), 5)
+
+        starts = [e.starts_at for e in helium]
+        self.assertEqual(len(starts), len(set(starts)), "expanded showtimes collided on starts_at")
+        self.assertEqual(starts, [
+            "2026-01-08T19:30", "2026-01-09T19:00", "2026-01-09T21:15",
+            "2026-01-10T19:00", "2026-01-10T21:30",
+        ])
+
+        ext_ids = [e.external_id for e in helium]
+        self.assertEqual(len(ext_ids), len(set(ext_ids)), "expanded showtimes collided on external_id")
+
+    def test_per_showtime_ticket_link_is_preferred_over_parent(self):
+        """
+        Zanies' top-level ticketLinks is the 'ticketlink.com' placeholder;
+        each showtime carries its own real etix.com link. Falling back to the
+        parent link here would hand every one of the five nights the same
+        dead placeholder instead of its actual ticket page.
+        """
+        zanies = sorted(
+            (e for e in self.result.events
+             if e.venue == "Zanies Comedy Night Club" and e.starts_at.startswith("2026-10")),
+            key=lambda e: e.starts_at,
+        )
+        self.assertEqual(len(zanies), 5)
+
+        urls = [e.ticket_url for e in zanies]
+        self.assertTrue(all(u and "etix.com" in u for u in urls))
+        self.assertEqual(len(urls), len(set(urls)), "all five nights got the same ticket link")
+        self.assertFalse(any("ticketlink.com" in u for u in urls))
+
+    def test_date_only_showtimes_still_produce_events(self):
+        """
+        Moon Palace Cancun's showtimes carry a date but no time (a resort
+        booking, not a club set). Each of the four still has to become its
+        own dateless Event rather than being dropped or collapsed to one.
+        """
+        moon = [e for e in self.result.events if "Moon Palace" in (e.venue or "")]
+        self.assertEqual(len(moon), 4)
+        starts = sorted(e.starts_at for e in moon)
+        self.assertEqual(starts, ["2026-01-28", "2026-01-29", "2026-01-30", "2026-01-31"])
+        self.assertTrue(all("T" not in s for s in starts))
+
+    def test_every_external_id_in_the_feed_is_unique(self):
+        """
+        All 131 showtimes share only 78 parent ids — external_id must bake in
+        date+time or distinct shows collide and upsert away four of five
+        nights in a club run.
+        """
+        ids = [e.external_id for e in self.result.events]
+        self.assertEqual(len(ids), 131)
+        self.assertEqual(len(ids), len(set(ids)))
+
+    def test_entry_without_showtimes_falls_back_to_top_level_date(self):
+        """No fixture entry lacks showtimes[] today, but the API doesn't
+        guarantee that — the fallback path (pre-dating this fix) must keep
+        working."""
+        payload = json.dumps({"data": {"events": [{
+            "id": "legacy-1",
+            "startDate": "2026-05-01",
+            "startTime": "20:00:00",
+            "venue": "Some Club",
+            "displayVenue": "Some Club",
+            "city": "Somewhere, TX",
+            "ticketLinks": [{"ticketLink": "https://example.com/tix"}],
+        }]}})
+        r = KyleKinaneOfficial().parse(payload)
+        self.assertTrue(r.ok)
+        self.assertEqual(r.total_seen, 1)
+        self.assertEqual(len(r.events), 1)
+        ev = r.events[0]
+        self.assertEqual(ev.starts_at, "2026-05-01T20:00")
+        self.assertEqual(ev.ticket_url, "https://example.com/tix")
+        self.assertEqual(ev.external_id, "legacy-1-2026-05-01-20:00")
 
 
 class TestCapCity(unittest.TestCase):

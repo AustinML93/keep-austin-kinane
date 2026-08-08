@@ -73,12 +73,45 @@ function applyStaticCopy() {
 
 /* ── Auth: a magic link, once. No passwords, appropriate to the stakes. ───── */
 (function captureToken() {
-  const t = new URLSearchParams(location.search).get("t");
+  // The token rides in the FRAGMENT (#t=…) because fragments never leave the
+  // browser — a ?t=… query param lands in Cloudflare and nginx access logs on
+  // every open of the link. The query form is still read as a fallback for
+  // links issued before the switch.
+  const fromHash = new URLSearchParams(location.hash.replace(/^#/, "")).get("t");
+  const t = fromHash || new URLSearchParams(location.search).get("t");
   if (t) {
     localStorage.setItem(TOKEN_KEY, t);
     // Don't leave the token sitting in the URL bar or in history.
     history.replaceState({}, "", location.pathname);
   }
+})();
+
+/* ── Share target ────────────────────────────────────────────────────────── */
+
+/*
+ * Android's share sheet → the manual-add form, prefilled. Discovery is social
+ * by design, and this is the difference between "Rob retypes a show from an
+ * Instagram post" and "Rob shares the post to Uncle BBQ and hits Add". Apps
+ * are inconsistent about which field carries the link — many stuff it into
+ * `text` — so we fish the first URL out of whichever field has one.
+ */
+(function captureShare() {
+  if (location.pathname !== "/share") return;
+  const q = new URLSearchParams(location.search);
+  const text = [q.get("title"), q.get("text")].filter(Boolean).join(" — ");
+  const url = q.get("url") || (text.match(/https?:\/\/\S+/) || [null])[0];
+  history.replaceState({}, "", "/");
+
+  const form = $("#add-form");
+  if (!form) return;
+  $("#add-box").open = true;
+  if (url) form.ticket_url.value = url;
+  // The note field is "who told you?" — shared text minus the link is the
+  // closest thing to that answer we can prefill.
+  const note = text.replace(/https?:\/\/\S+/g, "").trim();
+  if (note) form.note.value = note.slice(0, 120);
+  form.venue.focus();
+  form.scrollIntoView({ block: "center" });
 })();
 
 const token = () => localStorage.getItem(TOKEN_KEY);
@@ -277,6 +310,9 @@ function showRow(s, me) {
       <span class="city">${s.city || ""}${
         s.distance_mi != null ? ` · ${Math.round(s.distance_mi)}mi` : ""}</span>
       ${s.austin_status ? `<span class="note">${AUSTIN_NOTE[s.austin_status] || ""}</span>` : ""}
+      ${s.listing_status === "unconfirmed"
+        ? `<span class="note">its sources stopped listing this one — cancelled, sold out, or worse. nagging is paused until it reappears.</span>`
+        : ""}
       ${s.ticket_url ? `<a class="tix" href="${s.ticket_url}" target="_blank" rel="noopener">tickets</a>` : ""}
       <span class="scoreboard">${scoreboard}</span>
       ${buttons}
@@ -337,9 +373,21 @@ function renderShows(data) {
     b.addEventListener("click", () => setState(b.dataset.ev, b.dataset.st)));
 }
 
+// "All eyes open" is only as good as its timestamp — a poller that stopped
+// days ago would keep reporting well-informed nothing forever. The server
+// computes staleness (checked_ago_s / stale) so the claim carries its age.
+const ago = (s) => {
+  if (s == null) return null;
+  if (s < 90) return "just now";
+  if (s < 5400) return `${Math.round(s / 60)}m ago`;
+  if (s < 129600) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
+};
+
 function renderHealth(h) {
   // Silence has to be EARNED. Say what's being watched, and admit what isn't.
-  $("#status").textContent = h.status_line;
+  const when = ago(h.checked_ago_s);
+  $("#status").textContent = when ? `${h.status_line} · checked ${when}` : h.status_line;
   $("#status").classList.toggle("bad", !h.all_eyes_open);
 
   $("#sources").innerHTML = h.sources.map((s) => `

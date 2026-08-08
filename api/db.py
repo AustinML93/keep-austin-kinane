@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS events (
     austin_status     TEXT,
     artist_confidence REAL DEFAULT 1.0,
     first_seen_at     TEXT NOT NULL,
-    last_seen_at      TEXT NOT NULL
+    last_seen_at      TEXT NOT NULL,
+    listing_status    TEXT DEFAULT 'listed'   -- listed | unconfirmed (vanished from its sources)
 );
 
 CREATE TABLE IF NOT EXISTS event_sources (
@@ -195,6 +196,7 @@ def _migrate(con) -> None:
     """
     wanted = {
         "push_subscriptions": [("last_error", "TEXT")],
+        "events": [("listing_status", "TEXT DEFAULT 'listed'")],
     }
     for table, cols in wanted.items():
         have = {r["name"] for r in con.execute(f"PRAGMA table_info({table})")}
@@ -347,6 +349,69 @@ def upcoming(con, today: str | None = None) -> list[dict]:
 
 def set_austin_status(con, event_id: str, status: str | None) -> None:
     con.execute("UPDATE events SET austin_status = ? WHERE id = ?", (status, event_id))
+
+
+# How long a show has to be missing from healthy feeds before we stop vouching
+# for it. Long on purpose: wrongly scaring two men about a real show costs more
+# than noticing a cancellation a day late.
+UNLISTED_AFTER_HOURS = 48
+
+
+def reconcile_listings(con) -> list[tuple[str, str]]:
+    """
+    Notice shows that quietly vanished from their sources.
+
+    A cancelled or rescheduled show doesn't announce itself — it just stops
+    appearing in the feed, and until now nothing ever looked. An event goes
+    'unconfirmed' only when EVERY automatic source that ever reported it has
+    been polling healthily for UNLISTED_AFTER_HOURS without listing it.
+
+    A source that is itself broken — down, suspicious, config_failed, dormant —
+    cannot vouch either way: its silence is ignorance, not evidence, so it keeps
+    the event listed rather than condemning it. Otherwise one broken parser
+    would mark its entire catalogue cancelled, which is the exact
+    silence-becomes-a-lie failure this app exists to prevent.
+
+    Manual-only events are exempt — a human's note does not expire because a
+    scraper never mentioned it. Reappearing in any source heals the flag.
+    """
+    changed: list[tuple[str, str]] = []
+    srcs = {s["id"]: s for s in source_health(con)}
+
+    for ev in upcoming(con):
+        reporters = con.execute(
+            "SELECT source_id, last_seen_at FROM event_sources WHERE event_id = ?",
+            (ev["id"],)).fetchall()
+        auto = [r for r in reporters if r["source_id"] != "manual"]
+        if not auto:
+            continue
+
+        vanished = True
+        for r in auto:
+            s = srcs.get(r["source_id"])
+            if not s or s["health"] != "ok" or not s["last_success_at"]:
+                vanished = False
+                break
+            gap = _hours_between(r["last_seen_at"], s["last_success_at"])
+            if gap is None or gap < UNLISTED_AFTER_HOURS:
+                vanished = False
+                break
+
+        status = "unconfirmed" if vanished else "listed"
+        if (ev.get("listing_status") or "listed") != status:
+            con.execute("UPDATE events SET listing_status = ? WHERE id = ?",
+                        (status, ev["id"]))
+            changed.append((ev["id"], status))
+    return changed
+
+
+def _hours_between(earlier: str | None, later: str | None) -> float | None:
+    try:
+        a = datetime.fromisoformat(earlier)
+        b = datetime.fromisoformat(later)
+    except (TypeError, ValueError):
+        return None
+    return (b - a).total_seconds() / 3600
 
 
 # ──────────────────────────────────────────────────────────────────────────────
