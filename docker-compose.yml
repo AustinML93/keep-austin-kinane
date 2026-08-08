@@ -27,5 +27,9 @@ services:
       # vertical video, because oEmbed reports a fixed 200x113 for everything.
       - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
       - KAK_BITS_PLAYLIST=${KAK_BITS_PLAYLIST:-}
+      # Dead-man switch ping (healthchecks.io). ⚠️ A var in .env does NOTHING
+      # until it's also listed here — .env only feeds substitution into this
+      # file. WATCHDOG_URL sat in .env for a day pinging nobody over this.
+      - WATCHDOG_URL=${WATCHDOG_URL:-}
     volumes:
       - ./data:/data         # SQLite lives here. This is the only stateful thing.

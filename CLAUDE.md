@@ -90,7 +90,9 @@ python3 recon/probe_sources.py               # re-probe source viability
 - **Secrets live in `.env` beside `docker-compose.yml`** on the box — gitignored, and
   `docker compose` reads it automatically. See `.env.example` for the full list
   (`TICKETMASTER_API_KEY`, `YOUTUBE_API_KEY`, `KAK_BITS_PLAYLIST`, `WATCHDOG_URL`).
-  Never the repo.
+  Never the repo. ⚠️ **`.env` only feeds substitution** — a new variable does nothing
+  until `docker-compose.yml` also lists it under the api service's `environment:`.
+  `WATCHDOG_URL` shipped without that line once and silently pinged nobody.
 - **Magic links use the fragment** (`/#t=…`), not a query param — a `?t=` lands in
   Cloudflare/nginx access logs on every open. `app.js` still reads `?t=` as a fallback for
   links issued before the switch.
